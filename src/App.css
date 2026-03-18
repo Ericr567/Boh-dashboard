@@ -1,0 +1,351 @@
+.app-shell {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.sidebar,
+.panel,
+.metric-card {
+  background: linear-gradient(180deg, rgba(26, 34, 56, 0.94), rgba(15, 20, 35, 0.98));
+  border: 1px solid rgba(112, 140, 185, 0.16);
+  box-shadow: 0 24px 60px rgba(4, 7, 17, 0.35);
+}
+
+.sidebar {
+  border-radius: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5rem;
+}
+
+.brand-kicker,
+.eyebrow,
+.sidebar-label,
+.metric-label,
+.panel-badge,
+.note-meta span,
+.shift-pill span {
+  color: #91a4c7;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.brand-title {
+  color: #f8fbff;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.04em;
+  margin: 0.35rem 0 0.65rem;
+}
+
+.brand-copy {
+  color: #c8d4eb;
+  margin: 0;
+  max-width: 22ch;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 0.55rem;
+  margin: 1.8rem 0;
+}
+
+.sidebar-nav a {
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: #c8d4eb;
+  padding: 0.85rem 1rem;
+  text-decoration: none;
+  transition: 180ms ease;
+}
+
+.sidebar-nav a:hover,
+.sidebar-nav a.is-active {
+  background: rgba(73, 221, 187, 0.08);
+  border-color: rgba(73, 221, 187, 0.18);
+  color: #f8fbff;
+}
+
+.sidebar-card {
+  background: linear-gradient(160deg, rgba(84, 103, 232, 0.2), rgba(54, 205, 170, 0.12));
+  border: 1px solid rgba(154, 173, 255, 0.18);
+  border-radius: 22px;
+  padding: 1.1rem;
+}
+
+.sidebar-card strong,
+.topbar h2,
+.panel h3,
+.prep-card h4,
+.inventory-item h4,
+.station-card h4 {
+  color: #f8fbff;
+}
+
+.sidebar-card p,
+.panel p,
+.metric-card p,
+.prep-card p,
+.inventory-item p,
+.station-card p,
+.note-card p {
+  color: #c8d4eb;
+}
+
+.dashboard {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.topbar {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.topbar h2 {
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  letter-spacing: -0.04em;
+  margin: 0.35rem 0 0;
+  max-width: 12ch;
+}
+
+.topbar-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.shift-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(130, 148, 185, 0.18);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+}
+
+.shift-pill strong {
+  color: #f8fbff;
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.action-button {
+  background: linear-gradient(135deg, #49ddbb, #4e6df2);
+  border: 0;
+  border-radius: 999px;
+  color: #09111f;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0.95rem 1.2rem;
+}
+
+.snapshot-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-card {
+  border-radius: 24px;
+  padding: 1.25rem;
+}
+
+.metric-card strong {
+  color: #f8fbff;
+  display: block;
+  font-size: 2.35rem;
+  margin: 0.4rem 0 0.55rem;
+}
+
+.accent-teal {
+  background: linear-gradient(180deg, rgba(17, 63, 67, 0.96), rgba(13, 27, 34, 0.98));
+}
+
+.accent-amber {
+  background: linear-gradient(180deg, rgba(76, 53, 17, 0.96), rgba(25, 18, 12, 0.98));
+}
+
+.accent-coral {
+  background: linear-gradient(180deg, rgba(86, 32, 32, 0.96), rgba(29, 14, 18, 0.98));
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9fr);
+}
+
+.panel {
+  border-radius: 28px;
+  padding: 1.2rem;
+}
+
+.prep-panel,
+.stations-panel {
+  grid-column: 1;
+}
+
+.side-panel,
+.notes-panel {
+  grid-column: 2;
+}
+
+.panel-heading,
+.prep-header-row,
+.station-head,
+.inventory-item,
+.note-meta {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.panel h3 {
+  font-size: 1.25rem;
+  margin: 0.3rem 0 0;
+}
+
+.panel-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(130, 148, 185, 0.15);
+  border-radius: 999px;
+  padding: 0.5rem 0.7rem;
+}
+
+.prep-list,
+.inventory-list,
+.notes-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.prep-card,
+.inventory-item,
+.note-card,
+.station-card {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(130, 148, 185, 0.12);
+  border-radius: 20px;
+}
+
+.prep-card,
+.note-card,
+.station-card {
+  padding: 1rem;
+}
+
+.prep-card h4,
+.inventory-item h4,
+.station-card h4 {
+  margin: 0;
+}
+
+.prep-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.status-chip,
+.priority-chip,
+.load-pill {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.35rem 0.65rem;
+}
+
+.status-ready,
+.status-ok,
+.load-light {
+  background: rgba(73, 221, 187, 0.14);
+  color: #77f2d2;
+}
+
+.status-in-progress,
+.status-low,
+.priority-medium,
+.load-moderate {
+  background: rgba(246, 184, 80, 0.14);
+  color: #ffd37c;
+}
+
+.status-not-started,
+.status-critical,
+.priority-high,
+.load-heavy {
+  background: rgba(255, 122, 102, 0.14);
+  color: #ff9f90;
+}
+
+.priority-low {
+  background: rgba(117, 141, 183, 0.14);
+  color: #c4d4f2;
+}
+
+.inventory-item {
+  padding: 0.95rem 1rem;
+}
+
+.station-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.note-meta {
+  margin-bottom: 0.7rem;
+}
+
+@media (max-width: 1120px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .snapshot-grid,
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prep-panel,
+  .stations-panel,
+  .side-panel,
+  .notes-panel {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 1rem;
+  }
+
+  .topbar,
+  .panel-heading,
+  .prep-header-row,
+  .inventory-item,
+  .station-head,
+  .note-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .snapshot-grid,
+  .dashboard-grid,
+  .station-grid {
+    grid-template-columns: 1fr;
+  }
+}
