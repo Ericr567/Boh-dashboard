@@ -37,6 +37,13 @@ type ShiftNote = {
   timestamp: string
 }
 
+type AuditEntry = {
+  id: string
+  category: 'Prep' | 'Inventory'
+  message: string
+  timestamp: string
+}
+
 type StationStatus = {
   id: string
   name: StationName
@@ -148,6 +155,21 @@ const initialShiftNotes: ShiftNote[] = [
   },
 ]
 
+const initialAuditEntries: AuditEntry[] = [
+  {
+    id: 'audit-1',
+    category: 'Prep',
+    message: 'Burger patties remain in progress on Grill.',
+    timestamp: '10:48 AM',
+  },
+  {
+    id: 'audit-2',
+    category: 'Inventory',
+    message: 'Salmon portions dropped below threshold and need a delivery check.',
+    timestamp: '10:32 AM',
+  },
+]
+
 const stationStatuses: StationStatus[] = [
   {
     id: 'station-1',
@@ -191,6 +213,7 @@ const storageKeys = {
   inventoryItems: 'lineflow.inventoryItems',
   eightySixItems: 'lineflow.eightySixItems',
   shiftNotes: 'lineflow.shiftNotes',
+  auditEntries: 'lineflow.auditEntries',
 } as const
 
 let fallbackIdCounter = 0
@@ -282,6 +305,9 @@ function App() {
   const [shiftNotes, setShiftNotes] = useState<ShiftNote[]>(() =>
     loadStoredState(storageKeys.shiftNotes, initialShiftNotes),
   )
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(() =>
+    loadStoredState(storageKeys.auditEntries, initialAuditEntries),
+  )
   const [activeSection, setActiveSection] = useState<SectionId>('snapshot')
   const [actionAnnouncement, setActionAnnouncement] = useState('')
   const [handoffMessage, setHandoffMessage] = useState('')
@@ -301,6 +327,8 @@ function App() {
   const [editingInventoryName, setEditingInventoryName] = useState('')
   const [editingInventoryUnit, setEditingInventoryUnit] = useState('count')
   const [editingInventoryThreshold, setEditingInventoryThreshold] = useState('1')
+  const [inventoryFormError, setInventoryFormError] = useState('')
+  const [editingInventoryError, setEditingInventoryError] = useState('')
   const [newEightySixItem, setNewEightySixItem] = useState('')
   const [newEightySixChange, setNewEightySixChange] = useState('')
 
@@ -419,6 +447,18 @@ function App() {
     ])
   }
 
+  const addAuditEntry = (category: AuditEntry['category'], message: string) => {
+    setAuditEntries((currentEntries) => [
+      {
+        id: createRuntimeId('audit'),
+        category,
+        message,
+        timestamp: formatCurrentTime(),
+      },
+      ...currentEntries,
+    ].slice(0, 12))
+  }
+
   useEffect(() => {
     const syncActiveFromHash = () => {
       const hashValue = window.location.hash.replace('#', '')
@@ -488,6 +528,12 @@ function App() {
     }
   }, [shiftNotes])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(storageKeys.auditEntries, JSON.stringify(auditEntries))
+    }
+  }, [auditEntries])
+
   const handleGenerateHandoff = () => {
     const pendingPrep = prepItems
       .filter((item) => item.status !== 'Ready')
@@ -534,11 +580,17 @@ function App() {
     setNewPrepDueTime('11:30 AM')
     setHandoffMessage('')
     setIsPrepFormOpen(false)
+    addAuditEntry('Prep', `${name} added for ${newPrepStation} with ${newPrepPriority.toLowerCase()} priority.`)
     announceAction(`${name} added to prep for ${newPrepStation}.`)
   }
 
   const updateInventoryQuantity = (itemId: string, quantity: number) => {
     const safeQuantity = Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 0
+
+    const targetItem = inventoryItems.find((item) => item.id === itemId)
+    if (!targetItem || targetItem.quantity === safeQuantity) {
+      return
+    }
 
     setInventoryItems((currentItems) =>
       currentItems.map((item) =>
@@ -550,6 +602,8 @@ function App() {
           : item,
       ),
     )
+
+    addAuditEntry('Inventory', `${targetItem.name} quantity updated to ${safeQuantity} ${targetItem.unit}.`)
   }
 
   const handleAddInventoryItem = () => {
@@ -559,9 +613,11 @@ function App() {
     const unit = newInventoryUnit.trim() || 'count'
 
     if (!name || !Number.isFinite(quantity) || !Number.isFinite(threshold)) {
+      setInventoryFormError('Enter a valid item name, quantity, and threshold before saving.')
       return
     }
 
+    setInventoryFormError('')
     setInventoryItems((currentItems) => [
       {
         id: createRuntimeId('inventory'),
@@ -579,6 +635,7 @@ function App() {
     setNewInventoryThreshold('1')
     setIsInventoryFormOpen(false)
     addShiftNote('Expo', `Inventory added: ${name}, ${quantity} ${unit} on hand with threshold ${threshold}.`)
+    addAuditEntry('Inventory', `${name} added with ${quantity} ${unit} and threshold ${threshold}.`)
     announceAction(`${name} added to inventory.`)
   }
 
@@ -587,6 +644,7 @@ function App() {
     setEditingInventoryName(item.name)
     setEditingInventoryUnit(item.unit)
     setEditingInventoryThreshold(String(item.threshold))
+    setEditingInventoryError('')
   }
 
   const cancelEditingInventoryItem = () => {
@@ -594,16 +652,25 @@ function App() {
     setEditingInventoryName('')
     setEditingInventoryUnit('count')
     setEditingInventoryThreshold('1')
+    setEditingInventoryError('')
   }
 
   const handleSaveInventoryItem = (itemId: string) => {
     const name = editingInventoryName.trim()
     const unit = editingInventoryUnit.trim() || 'count'
     const threshold = Math.max(1, Math.floor(Number(editingInventoryThreshold)))
+    const targetItem = inventoryItems.find((item) => item.id === itemId)
 
     if (!name || !Number.isFinite(threshold)) {
+      setEditingInventoryError('Item name and threshold must be valid before saving changes.')
       return
     }
+
+    if (!targetItem) {
+      return
+    }
+
+    setEditingInventoryError('')
 
     setInventoryItems((currentItems) =>
       currentItems.map((item) =>
@@ -618,6 +685,10 @@ function App() {
       ),
     )
 
+    addAuditEntry(
+      'Inventory',
+      `${targetItem.name} updated to ${name}, unit ${unit}, threshold ${threshold}.`,
+    )
     cancelEditingInventoryItem()
     announceAction(`${name} inventory details updated.`)
   }
@@ -635,6 +706,7 @@ function App() {
     }
 
     addShiftNote('Expo', `Inventory removed: ${targetItem.name} was taken off the watchlist.`)
+    addAuditEntry('Inventory', `${targetItem.name} removed from inventory.`)
     announceAction(`${targetItem.name} removed from inventory.`)
   }
 
@@ -656,7 +728,8 @@ function App() {
     )
 
     if (status === 'Ready' && targetItem.status !== 'Ready') {
-        addShiftNote(targetItem.station, `${targetItem.name} marked ready on ${targetItem.station}.`)
+      addShiftNote(targetItem.station, `${targetItem.name} marked ready on ${targetItem.station}.`)
+      addAuditEntry('Prep', `${targetItem.name} marked ready on ${targetItem.station}.`)
 
       announceAction(`${targetItem.name} marked ready.`)
     }
@@ -909,7 +982,10 @@ function App() {
                 <button
                   className="action-button prep-action-button"
                   type="button"
-                  onClick={() => setIsInventoryFormOpen((isOpen) => !isOpen)}
+                  onClick={() => {
+                    setInventoryFormError('')
+                    setIsInventoryFormOpen((isOpen) => !isOpen)
+                  }}
                 >
                   {isInventoryFormOpen ? 'Cancel Item' : 'Add Inventory Item'}
                 </button>
@@ -968,6 +1044,12 @@ function App() {
                   <button className="action-button prep-submit" type="submit">
                     Save Inventory Item
                   </button>
+
+                  {inventoryFormError && (
+                    <p className="form-error" role="alert">
+                      {inventoryFormError}
+                    </p>
+                  )}
                 </form>
               )}
 
@@ -980,7 +1062,12 @@ function App() {
                             Item
                             <input
                               value={editingInventoryName}
-                              onChange={(event) => setEditingInventoryName(event.target.value)}
+                              onChange={(event) => {
+                                setEditingInventoryName(event.target.value)
+                                if (editingInventoryError) {
+                                  setEditingInventoryError('')
+                                }
+                              }}
                               required
                             />
                           </label>
@@ -988,7 +1075,12 @@ function App() {
                             Unit
                             <input
                               value={editingInventoryUnit}
-                              onChange={(event) => setEditingInventoryUnit(event.target.value)}
+                              onChange={(event) => {
+                                setEditingInventoryUnit(event.target.value)
+                                if (editingInventoryError) {
+                                  setEditingInventoryError('')
+                                }
+                              }}
                               required
                             />
                           </label>
@@ -998,10 +1090,20 @@ function App() {
                               type="number"
                               min={1}
                               value={editingInventoryThreshold}
-                              onChange={(event) => setEditingInventoryThreshold(event.target.value)}
+                              onChange={(event) => {
+                                setEditingInventoryThreshold(event.target.value)
+                                if (editingInventoryError) {
+                                  setEditingInventoryError('')
+                                }
+                              }}
                               required
                             />
                           </label>
+                          {editingInventoryError && (
+                            <p className="form-error inventory-edit-error" role="alert">
+                              {editingInventoryError}
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <div>
@@ -1282,6 +1384,28 @@ function App() {
                   <p>{note.message}</p>
                 </article>
               ))}
+
+              <div className="activity-panel">
+                <div className="panel-heading activity-heading">
+                  <div>
+                    <p className="eyebrow">Activity log</p>
+                    <h3>Prep and inventory audit trail</h3>
+                  </div>
+                  <span className="panel-badge">{auditEntries.length} events</span>
+                </div>
+
+                <div className="activity-list">
+                  {auditEntries.map((entry) => (
+                    <article className="activity-item" key={entry.id}>
+                      <div className="note-meta">
+                        <span>{entry.category}</span>
+                        <span>{entry.timestamp}</span>
+                      </div>
+                      <p>{entry.message}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
           </section>
