@@ -50,8 +50,6 @@ type StationStatus = {
   id: string
   name: StationName
   workload: 'Light' | 'Moderate' | 'Heavy'
-  activeTasks: number
-  readyItems: number
 }
 
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
@@ -177,50 +175,36 @@ const stationStatuses: StationStatus[] = [
     id: 'station-1',
     name: 'Grill',
     workload: 'Heavy',
-    activeTasks: 4,
-    readyItems: 2,
   },
   {
     id: 'station-2',
     name: 'Saute',
     workload: 'Moderate',
-    activeTasks: 3,
-    readyItems: 4,
   },
   {
     id: 'station-3',
     name: 'Pastry',
     workload: 'Light',
-    activeTasks: 1,
-    readyItems: 3,
   },
   {
     id: 'station-4',
     name: 'Pantry',
     workload: 'Moderate',
-    activeTasks: 2,
-    readyItems: 5,
   },
   {
     id: 'station-5',
     name: 'Expo',
     workload: 'Heavy',
-    activeTasks: 5,
-    readyItems: 0,
   },
   {
     id: 'station-6',
     name: 'Head Chef',
     workload: 'Moderate',
-    activeTasks: 1,
-    readyItems: 1,
   },
   {
     id: 'station-7',
     name: 'Sous Chef',
     workload: 'Moderate',
-    activeTasks: 1,
-    readyItems: 2,
   },
 ]
 
@@ -243,7 +227,182 @@ const createRuntimeId = (prefix: string) => {
   return `${prefix}-${fallbackIdCounter}`
 }
 
-const loadStoredState = <T,>(key: string, fallback: T): T => {
+const legacyStationNames: Partial<Record<string, StationName>> = {
+  Prep: 'Pantry',
+  Fry: 'Saute',
+}
+
+const isStationName = (value: unknown): value is StationName =>
+  typeof value === 'string' && stationNames.includes(value as StationName)
+
+const normalizeStationName = (value: unknown, fallback: StationName): StationName => {
+  if (isStationName(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && legacyStationNames[value]) {
+    return legacyStationNames[value]
+  }
+
+  return fallback
+}
+
+const isPrepStatus = (value: unknown): value is PrepStatus =>
+  value === 'Not Started' || value === 'In Progress' || value === 'Ready'
+
+const isPrepPriority = (value: unknown): value is PrepPriority =>
+  value === 'Low' || value === 'Medium' || value === 'High'
+
+const loadStoredPrepItems = (value: unknown): PrepItem[] => {
+  if (!Array.isArray(value)) {
+    return initialPrepItems
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const item = entry as Record<string, unknown>
+      if (typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.dueTime !== 'string') {
+        return null
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        station: normalizeStationName(item.station, 'Pantry'),
+        priority: isPrepPriority(item.priority) ? item.priority : 'Medium',
+        status: isPrepStatus(item.status) ? item.status : 'Not Started',
+        dueTime: item.dueTime,
+      }
+    })
+    .filter((item): item is PrepItem => item !== null)
+}
+
+const loadStoredInventoryItems = (value: unknown): InventoryItem[] => {
+  if (!Array.isArray(value)) {
+    return initialInventoryItems
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const item = entry as Record<string, unknown>
+      if (typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.unit !== 'string') {
+        return null
+      }
+
+      const quantity = Number(item.quantity)
+      const threshold = Number(item.threshold)
+
+      return {
+        id: item.id,
+        name: item.name,
+        quantity: Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 0,
+        unit: item.unit,
+        threshold: Number.isFinite(threshold) ? Math.max(1, Math.floor(threshold)) : 1,
+      }
+    })
+    .filter((item): item is InventoryItem => item !== null)
+}
+
+const loadStoredEightySixItems = (value: unknown): EightySixItem[] => {
+  if (!Array.isArray(value)) {
+    return initialEightySixItems
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const item = entry as Record<string, unknown>
+      if (
+        typeof item.id !== 'string' ||
+        typeof item.item !== 'string' ||
+        typeof item.change !== 'string' ||
+        typeof item.timestamp !== 'string'
+      ) {
+        return null
+      }
+
+      return {
+        id: item.id,
+        item: item.item,
+        change: item.change,
+        timestamp: item.timestamp,
+      }
+    })
+    .filter((item): item is EightySixItem => item !== null)
+}
+
+const loadStoredShiftNotes = (value: unknown): ShiftNote[] => {
+  if (!Array.isArray(value)) {
+    return initialShiftNotes
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const note = entry as Record<string, unknown>
+      if (
+        typeof note.id !== 'string' ||
+        typeof note.message !== 'string' ||
+        typeof note.timestamp !== 'string'
+      ) {
+        return null
+      }
+
+      return {
+        id: note.id,
+        station: normalizeStationName(note.station, 'Expo'),
+        message: note.message,
+        timestamp: note.timestamp,
+      }
+    })
+    .filter((note): note is ShiftNote => note !== null)
+}
+
+const loadStoredAuditEntries = (value: unknown): AuditEntry[] => {
+  if (!Array.isArray(value)) {
+    return initialAuditEntries
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const auditEntry = entry as Record<string, unknown>
+      if (
+        typeof auditEntry.id !== 'string' ||
+        typeof auditEntry.message !== 'string' ||
+        typeof auditEntry.timestamp !== 'string'
+      ) {
+        return null
+      }
+
+      return {
+        id: auditEntry.id,
+        category: auditEntry.category === 'Prep' ? 'Prep' : 'Inventory',
+        message: auditEntry.message,
+        timestamp: auditEntry.timestamp,
+      }
+    })
+    .filter((entry): entry is AuditEntry => entry !== null)
+}
+
+const loadStoredState = <T,>(key: string, fallback: T, normalize: (value: unknown) => T): T => {
   if (typeof window === 'undefined') {
     return fallback
   }
@@ -254,7 +413,7 @@ const loadStoredState = <T,>(key: string, fallback: T): T => {
       return fallback
     }
 
-    return JSON.parse(storedValue) as T
+    return normalize(JSON.parse(storedValue))
   } catch {
     return fallback
   }
@@ -313,19 +472,19 @@ const getStationDomId = (stationName: StationName) =>
 
 function App() {
   const [prepItems, setPrepItems] = useState<PrepItem[]>(() =>
-    loadStoredState(storageKeys.prepItems, initialPrepItems),
+    loadStoredState(storageKeys.prepItems, initialPrepItems, loadStoredPrepItems),
   )
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
-    loadStoredState(storageKeys.inventoryItems, initialInventoryItems),
+    loadStoredState(storageKeys.inventoryItems, initialInventoryItems, loadStoredInventoryItems),
   )
   const [eightySixItems, setEightySixItems] = useState<EightySixItem[]>(() =>
-    loadStoredState(storageKeys.eightySixItems, initialEightySixItems),
+    loadStoredState(storageKeys.eightySixItems, initialEightySixItems, loadStoredEightySixItems),
   )
   const [shiftNotes, setShiftNotes] = useState<ShiftNote[]>(() =>
-    loadStoredState(storageKeys.shiftNotes, initialShiftNotes),
+    loadStoredState(storageKeys.shiftNotes, initialShiftNotes, loadStoredShiftNotes),
   )
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(() =>
-    loadStoredState(storageKeys.auditEntries, initialAuditEntries),
+    loadStoredState(storageKeys.auditEntries, initialAuditEntries, loadStoredAuditEntries),
   )
   const [activeSection, setActiveSection] = useState<SectionId>('snapshot')
   const [actionAnnouncement, setActionAnnouncement] = useState('')
@@ -348,6 +507,7 @@ function App() {
   const [editingInventoryThreshold, setEditingInventoryThreshold] = useState('1')
   const [inventoryFormError, setInventoryFormError] = useState('')
   const [editingInventoryError, setEditingInventoryError] = useState('')
+  const [inventoryQuantityDrafts, setInventoryQuantityDrafts] = useState<Record<string, string>>({})
   const [auditFilter, setAuditFilter] = useState<AuditFilter>('All')
   const [newEightySixItem, setNewEightySixItem] = useState('')
   const [newEightySixChange, setNewEightySixChange] = useState('')
@@ -484,6 +644,44 @@ function App() {
       },
       ...currentEntries,
     ].slice(0, 12))
+  }
+
+  const clearInventoryQuantityDraft = (itemId: string) => {
+    setInventoryQuantityDrafts((currentDrafts) => {
+      if (!(itemId in currentDrafts)) {
+        return currentDrafts
+      }
+
+      const nextDrafts = { ...currentDrafts }
+      delete nextDrafts[itemId]
+      return nextDrafts
+    })
+  }
+
+  const handleInventoryQuantityInputChange = (itemId: string, value: string) => {
+    if (!/^\d*$/.test(value)) {
+      return
+    }
+
+    setInventoryQuantityDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [itemId]: value,
+    }))
+  }
+
+  const commitInventoryQuantityInput = (itemId: string) => {
+    const draftValue = inventoryQuantityDrafts[itemId]
+    if (draftValue === undefined) {
+      return
+    }
+
+    if (draftValue === '') {
+      clearInventoryQuantityDraft(itemId)
+      return
+    }
+
+    updateInventoryQuantity(itemId, Number(draftValue))
+    clearInventoryQuantityDraft(itemId)
   }
 
   useEffect(() => {
@@ -630,6 +828,7 @@ function App() {
       ),
     )
 
+    clearInventoryQuantityDraft(itemId)
     addAuditEntry('Inventory', `${targetItem.name} quantity updated to ${safeQuantity} ${targetItem.unit}.`)
   }
 
@@ -1092,6 +1291,15 @@ function App() {
 
               {inventoryItems.map((item) => (
                 <article className="inventory-item" key={item.id}>
+                  {(() => {
+                    const draftQuantity = inventoryQuantityDrafts[item.id]
+                    const stepperQuantity =
+                      draftQuantity !== undefined && draftQuantity !== ''
+                        ? Number(draftQuantity)
+                        : item.quantity
+
+                    return (
+                      <>
                     <div className="inventory-item-main">
                       {editingInventoryItemId === item.id ? (
                         <div className="inventory-edit-fields">
@@ -1156,7 +1364,7 @@ function App() {
                     <button
                       className="inventory-stepper"
                       type="button"
-                      onClick={() => updateInventoryQuantity(item.id, item.quantity - 1)}
+                      onClick={() => updateInventoryQuantity(item.id, stepperQuantity - 1)}
                       aria-label={`Decrease ${item.name} count`}
                     >
                       -
@@ -1165,14 +1373,26 @@ function App() {
                       className="inventory-input"
                       type="number"
                       min={0}
-                      value={item.quantity}
-                      onChange={(event) => updateInventoryQuantity(item.id, Number(event.target.value))}
+                        inputMode="numeric"
+                        value={draftQuantity ?? String(item.quantity)}
+                      onChange={(event) => handleInventoryQuantityInputChange(item.id, event.target.value)}
+                        onBlur={() => commitInventoryQuantityInput(item.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            commitInventoryQuantityInput(item.id)
+                          }
+
+                          if (event.key === 'Escape') {
+                            clearInventoryQuantityDraft(item.id)
+                          }
+                        }}
                       aria-label={`${item.name} count`}
                     />
                     <button
                       className="inventory-stepper"
                       type="button"
-                      onClick={() => updateInventoryQuantity(item.id, item.quantity + 1)}
+                      onClick={() => updateInventoryQuantity(item.id, stepperQuantity + 1)}
                       aria-label={`Increase ${item.name} count`}
                     >
                       +
@@ -1222,6 +1442,9 @@ function App() {
                         </>
                       )}
                   </div>
+                      </>
+                    )
+                  })()}
                 </article>
               ))}
             </div>
