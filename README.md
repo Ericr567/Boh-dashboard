@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# LineFlow BOH Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+LineFlow is a Back-of-House operations dashboard for service readiness. It provides quick visibility into prep progress, station workload, low-stock alerts, and shift handoff notes.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19
+- TypeScript
+- Vite 8
+- ESLint 9
 
-## React Compiler
+## Requirements
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 20+
+- npm 10+
 
-## Expanding the ESLint configuration
+## Local Development
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Install dependencies:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Start the dev server:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+Default local URL:
+
+```text
+http://localhost:5173/
+```
+
+## Build and Preview
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+Preview the built app:
+
+```bash
+npm run preview
+```
+
+Default preview URL:
+
+```text
+http://localhost:4173/
+```
+
+Note: The Vite base path is configured to use relative asset URLs so the app can be hosted from a subfolder and the generated `dist/index.html` can be opened in environments that do not serve from root.
+
+## Scripts
+
+- `npm run dev`: start local dev server
+- `npm run build`: type-check and build production assets
+- `npm run preview`: serve production build locally
+- `npm run lint`: run ESLint checks
