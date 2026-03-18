@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
-type StationName = 'Grill' | 'Saute' | 'Pastry' | 'Pantry' | 'Expo'
+type StationName = 'Grill' | 'Saute' | 'Pastry' | 'Pantry' | 'Expo' | 'Head Chef' | 'Sous Chef'
 
 type PrepStatus = 'Not Started' | 'In Progress' | 'Ready'
 type PrepPriority = 'Low' | 'Medium' | 'High'
@@ -44,6 +44,8 @@ type AuditEntry = {
   timestamp: string
 }
 
+type AuditFilter = 'All' | AuditEntry['category']
+
 type StationStatus = {
   id: string
   name: StationName
@@ -52,7 +54,7 @@ type StationStatus = {
   readyItems: number
 }
 
-const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo']
+const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
 
 const initialPrepItems: PrepItem[] = [
   {
@@ -206,6 +208,20 @@ const stationStatuses: StationStatus[] = [
     activeTasks: 5,
     readyItems: 0,
   },
+  {
+    id: 'station-6',
+    name: 'Head Chef',
+    workload: 'Moderate',
+    activeTasks: 1,
+    readyItems: 1,
+  },
+  {
+    id: 'station-7',
+    name: 'Sous Chef',
+    workload: 'Moderate',
+    activeTasks: 1,
+    readyItems: 2,
+  },
 ]
 
 const storageKeys = {
@@ -292,6 +308,9 @@ const getInventoryStatus = (
   return 'OK'
 }
 
+const getStationDomId = (stationName: StationName) =>
+  `station-toggle-${stationName.toLowerCase().replace(/\s+/g, '-')}`
+
 function App() {
   const [prepItems, setPrepItems] = useState<PrepItem[]>(() =>
     loadStoredState(storageKeys.prepItems, initialPrepItems),
@@ -329,6 +348,7 @@ function App() {
   const [editingInventoryThreshold, setEditingInventoryThreshold] = useState('1')
   const [inventoryFormError, setInventoryFormError] = useState('')
   const [editingInventoryError, setEditingInventoryError] = useState('')
+  const [auditFilter, setAuditFilter] = useState<AuditFilter>('All')
   const [newEightySixItem, setNewEightySixItem] = useState('')
   const [newEightySixChange, setNewEightySixChange] = useState('')
 
@@ -349,6 +369,8 @@ function App() {
       Pastry: 'Moderate',
       Pantry: 'Moderate',
       Expo: 'Moderate',
+      'Head Chef': 'Moderate',
+      'Sous Chef': 'Moderate',
     },
   )
 
@@ -395,6 +417,8 @@ function App() {
     Pastry: 2,
     Pantry: 3,
     Expo: 4,
+    'Head Chef': 5,
+    'Sous Chef': 6,
   })
 
   const sortedPrepItems = [...prepItems].sort((leftItem, rightItem) => {
@@ -420,12 +444,15 @@ function App() {
 
   const activeStations = stationSummaries.filter((station) => station.activeTasks > 0).length
   const dateLabel = formatDate.format(new Date())
+  const filteredAuditEntries = auditEntries.filter(
+    (entry) => auditFilter === 'All' || entry.category === auditFilter,
+  )
 
   const selectedStationPrepItems = selectedStation
     ? prepItems.filter((item) => item.station === selectedStation)
     : []
   const selectedStationButtonId = selectedStation
-    ? `station-toggle-${selectedStation.toLowerCase()}`
+    ? getStationDomId(selectedStation)
     : undefined
 
   const announceAction = (message: string) => {
@@ -775,6 +802,16 @@ function App() {
     setEightySixItems([])
     setIsEightySixFormOpen(false)
     announceAction("All 86'd items cleared.")
+  }
+
+  const handleClearAuditEntries = () => {
+    if (!window.confirm('Clear the activity log?')) {
+      return
+    }
+
+    setAuditEntries([])
+    setAuditFilter('All')
+    announceAction('Activity log cleared.')
   }
 
   return (
@@ -1290,7 +1327,7 @@ function App() {
             <div className="station-grid">
               {stationSummaries.map((station) => (
                 <button
-                    id={`station-toggle-${station.name.toLowerCase()}`}
+                    id={getStationDomId(station.name)}
                   className={`station-card station-button ${selectedStation === station.name ? 'is-selected' : ''}`}
                   key={station.name}
                   type="button"
@@ -1391,19 +1428,47 @@ function App() {
                     <p className="eyebrow">Activity log</p>
                     <h3>Prep and inventory audit trail</h3>
                   </div>
-                  <span className="panel-badge">{auditEntries.length} events</span>
+                  <div className="activity-toolbar">
+                    <span className="panel-badge">{filteredAuditEntries.length} events</span>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleClearAuditEntries}
+                      disabled={auditEntries.length === 0}
+                    >
+                      Clear Log
+                    </button>
+                  </div>
+                </div>
+
+                <div className="activity-filters" role="toolbar" aria-label="Filter activity log">
+                  {(['All', 'Prep', 'Inventory'] as AuditFilter[]).map((filterOption) => (
+                    <button
+                      key={filterOption}
+                      className={`secondary-button activity-filter-button ${auditFilter === filterOption ? 'is-active' : ''}`}
+                      type="button"
+                      aria-pressed={auditFilter === filterOption}
+                      onClick={() => setAuditFilter(filterOption)}
+                    >
+                      {filterOption}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="activity-list">
-                  {auditEntries.map((entry) => (
-                    <article className="activity-item" key={entry.id}>
-                      <div className="note-meta">
-                        <span>{entry.category}</span>
-                        <span>{entry.timestamp}</span>
-                      </div>
-                      <p>{entry.message}</p>
-                    </article>
-                  ))}
+                  {filteredAuditEntries.length === 0 ? (
+                    <p className="prep-empty">No activity entries match the current filter.</p>
+                  ) : (
+                    filteredAuditEntries.map((entry) => (
+                      <article className="activity-item" key={entry.id}>
+                        <div className="note-meta">
+                          <span>{entry.category}</span>
+                          <span>{entry.timestamp}</span>
+                        </div>
+                        <p>{entry.message}</p>
+                      </article>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

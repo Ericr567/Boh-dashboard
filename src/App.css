@@ -611,6 +611,26 @@
   margin-bottom: 0.4rem;
 }
 
+.activity-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.activity-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.activity-filter-button.is-active {
+  background: rgba(73, 221, 187, 0.12);
+  border-color: rgba(73, 221, 187, 0.22);
+  color: #f8fbff;
+}
+
 .activity-list {
   display: grid;
   gap: 0.75rem;
