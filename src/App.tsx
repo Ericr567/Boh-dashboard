@@ -249,7 +249,12 @@ const loadStoredShiftNotes = (value: unknown): ShiftNote[] => {
         timestamp: note.timestamp,
       }
     })
-    .filter((note): note is ShiftNote => note !== null && !legacySeededShiftNoteIds.has(note.id))
+    .filter(
+      (note): note is ShiftNote =>
+        note !== null &&
+        !legacySeededShiftNoteIds.has(note.id) &&
+        !note.message.startsWith('Inventory '),
+    )
 }
 
 const loadStoredAuditEntries = (value: unknown): AuditEntry[] => {
@@ -966,7 +971,6 @@ function App() {
     setNewInventoryUnit('count')
     setNewInventoryThreshold('1')
     setIsInventoryFormOpen(false)
-    addShiftNote('Expo', `Inventory added: ${name}, ${quantity} ${unit} on hand with threshold ${threshold}.`)
     addAuditEntry('Inventory', `${name} added with ${quantity} ${unit} and threshold ${threshold}.`)
     announceAction(`${name} added to inventory.`)
   }
@@ -1038,7 +1042,6 @@ function App() {
       cancelEditingInventoryItem()
     }
 
-    addShiftNote('Expo', `Inventory removed: ${targetItem.name} was taken off the watchlist.`)
     addAuditEntry('Inventory', `${targetItem.name} removed from inventory.`)
     announceAction(`${targetItem.name} removed from inventory.`)
     queueUndoAction(`${targetItem.name} removed from inventory.`, () => {
