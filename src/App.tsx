@@ -13,6 +13,8 @@ type PrepItem = {
   priority: PrepPriority
   status: PrepStatus
   dueTime: string
+  quantity: string
+  assignee: StationName | ''
 }
 
 type InventoryItem = {
@@ -143,6 +145,8 @@ const normalizeImportedPrepItems = (value: unknown): PrepItem[] => {
         priority: isPrepPriority(item.priority) ? item.priority : 'Medium',
         status: isPrepStatus(item.status) ? item.status : 'Not Started',
         dueTime: item.dueTime,
+        quantity: typeof item.quantity === 'string' ? item.quantity : '',
+        assignee: stationNames.includes(item.assignee as StationName) ? item.assignee as StationName : '',
       }
     })
     .filter((item): item is PrepItem => item !== null)
@@ -391,6 +395,11 @@ function App() {
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState<InventoryStatusFilter>('All')
   const [undoState, setUndoState] = useState<UndoState | null>(null)
   const [backupError, setBackupError] = useState('')
+  const [now, setNow] = useState(() => new Date())
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
+  const [selectedPrepIds, setSelectedPrepIds] = useState<Set<string>>(new Set())
+  const [newPrepQuantity, setNewPrepQuantity] = useState('')
+  const [newPrepAssignee, setNewPrepAssignee] = useState<StationName | ''>('')
   const undoTimeoutRef = useRef<number | null>(null)
   const importFileRef = useRef<HTMLInputElement | null>(null)
 
@@ -511,7 +520,18 @@ function App() {
   })
 
   const activeStations = stationSummaries.filter((station) => station.activeTasks > 0).length
-  const dateLabel = formatDate.format(new Date())
+  const dateLabel = formatDate.format(now)
+  const getShiftLabel = (hour: number): string => {
+    if (hour < 6) return 'Early morning'
+    if (hour < 12) return 'Morning prep'
+    if (hour < 16) return 'Afternoon prep'
+    if (hour < 17) return 'Happy hour'
+    if (hour < 18) return 'Happy hour & service'
+    if (hour < 22) return 'Dinner service'
+    return 'Closing'
+  }
+  const shiftLabel = getShiftLabel(now.getHours())
+  const isPreServiceUrgent = now.getHours() >= 16
   const filteredAuditEntries = auditEntries.filter(
     (entry) => auditFilter === 'All' || entry.category === auditFilter,
   )
@@ -771,6 +791,45 @@ function App() {
     }
   }, [])
 
+  // Auto-refresh shift label every minute
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  // Online / offline detection
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // Keyboard shortcuts: N = new prep, E = new 86, I = new inventory
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.key === 'n' || event.key === 'N') {
+        setIsPrepFormOpen(true)
+        jumpToSection('prep-board')
+      } else if (event.key === 'e' || event.key === 'E') {
+        setIsEightySixFormOpen(true)
+        jumpToSection('eighty-six')
+      } else if (event.key === 'i' || event.key === 'I') {
+        setIsInventoryFormOpen(true)
+        jumpToSection('inventory')
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
   const handleGenerateHandoff = () => {
     const pendingPrep = prepItems
       .filter((item) => item.status !== 'Ready')
@@ -783,7 +842,7 @@ function App() {
       .join(', ')
 
     const summary =
-      `Handoff for ${dateLabel}: ${openPrepCount} prep items open (${pendingPrep || 'none'}). ` +
+      `${shiftLabel} handoff — ${dateLabel}: ${openPrepCount} prep items open (${pendingPrep || 'none'}). ` +
       `${criticalStockCount} low-stock alerts (${lowStockItems || 'none'}). ` +
       `${activeStations} active stations.`
 
@@ -806,6 +865,8 @@ function App() {
       priority: newPrepPriority,
       status: 'Not Started',
       dueTime: newPrepDueTime.trim() || 'TBD',
+      quantity: newPrepQuantity.trim(),
+      assignee: newPrepAssignee,
     }
 
     setPrepItems((currentItems) => [newItem, ...currentItems])
@@ -815,10 +876,32 @@ function App() {
     setNewPrepName('')
     setNewPrepPriority('Medium')
     setNewPrepDueTime('11:30 AM')
+    setNewPrepQuantity('')
+    setNewPrepAssignee('')
     setHandoffMessage('')
     setIsPrepFormOpen(false)
     addAuditEntry('Prep', `${name} added for ${newPrepStation} with ${newPrepPriority.toLowerCase()} priority.`)
     announceAction(`${name} added to prep for ${newPrepStation}.`)
+  }
+
+  const handleBatchMarkReady = () => {
+    if (selectedPrepIds.size === 0) return
+    const ids = Array.from(selectedPrepIds)
+    ids.forEach((id) => updatePrepItemStatus(id, 'Ready'))
+    setSelectedPrepIds(new Set())
+    announceAction(`${ids.length} prep item${ids.length > 1 ? 's' : ''} marked ready.`)
+  }
+
+  const togglePrepSelection = (id: string) => {
+    setSelectedPrepIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
   }
 
   const updateInventoryQuantity = (itemId: string, quantity: number) => {
@@ -1099,8 +1182,7 @@ function App() {
 
         <div className="sidebar-card">
           <span className="sidebar-label">Current shift</span>
-          <strong>Dinner push</strong>
-          <p>Focus on prep completion before 5:30 PM and watch critical stock counts.</p>
+          <strong>{shiftLabel}</strong>
           <p className="sidebar-note">Data is stored locally in this browser.</p>
           <div className="sidebar-actions">
             <button className="secondary-button" type="button" onClick={handleExportData}>
@@ -1128,6 +1210,11 @@ function App() {
       </aside>
 
       <main id="main-content" className="dashboard">
+        {!isOnline && (
+          <div className="offline-banner" role="status">
+            You are offline. The app is still fully functional — data is saved locally.
+          </div>
+        )}
         <header className="topbar">
           <div>
             <p className="eyebrow">Back of House Dashboard</p>
@@ -1136,11 +1223,14 @@ function App() {
 
           <div className="topbar-meta">
             <div className="shift-pill">
-              <span>Live shift</span>
+              <span>{shiftLabel}</span>
               <strong>{dateLabel}</strong>
             </div>
             <button className="action-button" type="button" onClick={handleGenerateHandoff}>
               Generate Handoff
+            </button>
+            <button className="secondary-button" type="button" onClick={() => window.print()}>
+              Print
             </button>
           </div>
         </header>
@@ -1244,6 +1334,15 @@ function App() {
                 >
                   {isPrepFormOpen ? 'Cancel New Prep' : 'New Prep Entry'}
                 </button>
+                {selectedPrepIds.size > 0 && (
+                  <button
+                    className="action-button prep-action-button"
+                    type="button"
+                    onClick={handleBatchMarkReady}
+                  >
+                    Mark {selectedPrepIds.size} Ready
+                  </button>
+                )}
               </div>
 
               <div className="panel-toolbar" role="group" aria-label="Filter prep items">
@@ -1322,6 +1421,30 @@ function App() {
                     />
                   </label>
 
+                  <label>
+                    Quantity / Amount
+                    <input
+                      value={newPrepQuantity}
+                      onChange={(event) => setNewPrepQuantity(event.target.value)}
+                      placeholder="e.g. 6 portions"
+                    />
+                  </label>
+
+                  <label>
+                    Assignee (optional)
+                    <select
+                      value={newPrepAssignee}
+                      onChange={(event) => setNewPrepAssignee(event.target.value as StationName | '')}
+                    >
+                      <option value="">Unassigned</option>
+                      {stationNames.map((stationName) => (
+                        <option key={stationName} value={stationName}>
+                          {stationName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
                   <button className="action-button prep-submit" type="submit">
                     Add Prep Item
                   </button>
@@ -1342,12 +1465,28 @@ function App() {
               ) : filteredPrepItems.length === 0 ? (
                 <p className="prep-empty">No prep items match your search or station filter.</p>
               ) : (
-                filteredPrepItems.map((item) => (
-                  <article className="prep-card" key={item.id}>
+                filteredPrepItems.map((item) => {
+                  const isUrgent = isPreServiceUrgent && item.status !== 'Ready'
+                  return (
+                  <article
+                    className={`prep-card${isUrgent ? ' prep-card--urgent' : ''}`}
+                    key={item.id}
+                  >
                     <div className="prep-header-row">
+                      <label className="prep-select-label" aria-label={`Select ${item.name}`}>
+                        <input
+                          type="checkbox"
+                          className="prep-select-checkbox"
+                          checked={selectedPrepIds.has(item.id)}
+                          onChange={() => togglePrepSelection(item.id)}
+                        />
+                      </label>
                       <div>
-                        <h4>{item.name}</h4>
-                        <p>{item.station} station</p>
+                        <h4>
+                          {item.name}
+                          {isUrgent && <span className="urgency-badge">Urgent</span>}
+                        </h4>
+                        <p>{item.station} station{item.assignee ? ` — ${item.assignee}` : ''}</p>
                       </div>
                       <span className={`status-chip status-${item.status.toLowerCase().replace(/\s+/g, '-')}`}>
                         {item.status}
@@ -1357,9 +1496,11 @@ function App() {
                     <div className="prep-meta">
                       <span className={`priority-chip priority-${item.priority.toLowerCase()}`}>{item.priority} priority</span>
                       <span>Due {item.dueTime}</span>
+                      {item.quantity && <span>{item.quantity}</span>}
                     </div>
                   </article>
-                ))
+                  )
+                })
               )}
             </div>
             </section>

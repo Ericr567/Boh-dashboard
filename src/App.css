@@ -784,4 +784,112 @@
     flex-direction: column;
   }
 
+  /* Larger touch targets on mobile */
+  .action-button,
+  .secondary-button,
+  .mark-ready-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .prep-select-checkbox {
+    height: 22px;
+    width: 22px;
+  }
+}
+
+/* ─── Offline banner ─────────────────────────────── */
+.offline-banner {
+  background: rgba(255, 180, 50, 0.15);
+  border: 1px solid rgba(255, 180, 50, 0.45);
+  border-radius: 10px;
+  color: #ffd97a;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+  padding: 0.6rem 1rem;
+  text-align: center;
+}
+
+/* ─── Urgency badge ──────────────────────────────── */
+.prep-card--urgent {
+  border-color: rgba(255, 100, 80, 0.45);
+}
+
+.urgency-badge {
+  background: rgba(255, 80, 60, 0.18);
+  border: 1px solid rgba(255, 100, 80, 0.5);
+  border-radius: 999px;
+  color: #ff7e6b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-left: 0.45rem;
+  padding: 0.1em 0.55em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* ─── Prep item checkbox ─────────────────────────── */
+.prep-select-label {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.prep-select-checkbox {
+  accent-color: #49ddbb;
+  cursor: pointer;
+  height: 16px;
+  width: 16px;
+}
+
+/* ─── Print styles ───────────────────────────────── */
+@media print {
+  .sidebar,
+  .skip-link,
+  .sr-only,
+  .offline-banner,
+  .undo-toast,
+  .onboarding-card,
+  .prep-actions,
+  .panel-toolbar,
+  .action-button,
+  .secondary-button,
+  .prep-select-label,
+  .inventory-actions,
+  .activity-panel {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+    padding: 0;
+  }
+
+  .dashboard {
+    padding: 1cm;
+  }
+
+  .snapshot-grid,
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .metric-card,
+  .panel,
+  .prep-card {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    color: #111 !important;
+  }
+
+  .handoff-message {
+    border: 1px solid #999;
+    border-radius: 6px;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+  }
 }
