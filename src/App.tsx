@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 type StationName = 'Grill' | 'Saute' | 'Pastry' | 'Pantry' | 'Expo' | 'Head Chef' | 'Sous Chef'
@@ -45,6 +45,13 @@ type AuditEntry = {
 }
 
 type AuditFilter = 'All' | AuditEntry['category']
+type PrepStationFilter = 'All' | StationName
+type InventoryStatusFilter = 'All' | 'OK' | 'Low' | 'Critical'
+
+type UndoState = {
+  message: string
+  onUndo: () => void
+}
 
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
 
@@ -363,6 +370,12 @@ function App() {
   const [auditFilter, setAuditFilter] = useState<AuditFilter>('All')
   const [newEightySixItem, setNewEightySixItem] = useState('')
   const [newEightySixChange, setNewEightySixChange] = useState('')
+  const [prepSearchQuery, setPrepSearchQuery] = useState('')
+  const [prepStationFilter, setPrepStationFilter] = useState<PrepStationFilter>('All')
+  const [inventorySearchQuery, setInventorySearchQuery] = useState('')
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState<InventoryStatusFilter>('All')
+  const [undoState, setUndoState] = useState<UndoState | null>(null)
+  const undoTimeoutRef = useRef<number | null>(null)
 
   const openPrepCount = prepItems.filter((item) => item.status !== 'Ready').length
   const readyPrepCount = prepItems.filter((item) => item.status === 'Ready').length
@@ -463,12 +476,34 @@ function App() {
   })
 
   const visiblePrepItems = sortedPrepItems.filter((item) => item.status !== 'Ready')
+  const filteredPrepItems = visiblePrepItems.filter((item) => {
+    const query = prepSearchQuery.trim().toLowerCase()
+    const matchesQuery = !query || item.name.toLowerCase().includes(query)
+    const matchesStation = prepStationFilter === 'All' || item.station === prepStationFilter
+
+    return matchesQuery && matchesStation
+  })
+
+  const filteredInventoryItems = inventoryItems.filter((item) => {
+    const query = inventorySearchQuery.trim().toLowerCase()
+    const status = getInventoryStatus(item.quantity, item.threshold)
+    const matchesQuery = !query || item.name.toLowerCase().includes(query)
+    const matchesStatus = inventoryStatusFilter === 'All' || status === inventoryStatusFilter
+
+    return matchesQuery && matchesStatus
+  })
 
   const activeStations = stationSummaries.filter((station) => station.activeTasks > 0).length
   const dateLabel = formatDate.format(new Date())
   const filteredAuditEntries = auditEntries.filter(
     (entry) => auditFilter === 'All' || entry.category === auditFilter,
   )
+  const isFirstRun =
+    prepItems.length === 0 &&
+    inventoryItems.length === 0 &&
+    eightySixItems.length === 0 &&
+    shiftNotes.length === 0 &&
+    auditEntries.length === 0
 
   const selectedStationPrepItems = selectedStation
     ? prepItems.filter((item) => item.station === selectedStation)
@@ -482,6 +517,37 @@ function App() {
     window.setTimeout(() => {
       setActionAnnouncement(message)
     }, 0)
+  }
+
+  const queueUndoAction = (message: string, onUndo: () => void) => {
+    if (undoTimeoutRef.current !== null) {
+      window.clearTimeout(undoTimeoutRef.current)
+    }
+
+    setUndoState({ message, onUndo })
+    undoTimeoutRef.current = window.setTimeout(() => {
+      setUndoState(null)
+      undoTimeoutRef.current = null
+    }, 8000)
+  }
+
+  const handleUndoAction = () => {
+    if (!undoState) {
+      return
+    }
+
+    undoState.onUndo()
+    setUndoState(null)
+    if (undoTimeoutRef.current !== null) {
+      window.clearTimeout(undoTimeoutRef.current)
+      undoTimeoutRef.current = null
+    }
+    announceAction('Last action undone.')
+  }
+
+  const jumpToSection = (sectionId: SectionId) => {
+    setActiveSection(sectionId)
+    window.location.hash = sectionId
   }
 
   const addShiftNote = (station: StationName, message: string) => {
@@ -620,6 +686,14 @@ function App() {
       window.localStorage.setItem(storageKeys.auditEntries, JSON.stringify(auditEntries))
     }
   }, [auditEntries])
+
+  useEffect(() => {
+    return () => {
+      if (undoTimeoutRef.current !== null) {
+        window.clearTimeout(undoTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleGenerateHandoff = () => {
     const pendingPrep = prepItems
@@ -783,6 +857,7 @@ function App() {
 
   const handleRemoveInventoryItem = (itemId: string) => {
     const targetItem = inventoryItems.find((item) => item.id === itemId)
+    const targetIndex = inventoryItems.findIndex((item) => item.id === itemId)
 
     if (!targetItem || !window.confirm(`Remove ${targetItem.name} from inventory?`)) {
       return
@@ -796,6 +871,20 @@ function App() {
     addShiftNote('Expo', `Inventory removed: ${targetItem.name} was taken off the watchlist.`)
     addAuditEntry('Inventory', `${targetItem.name} removed from inventory.`)
     announceAction(`${targetItem.name} removed from inventory.`)
+    queueUndoAction(`${targetItem.name} removed from inventory.`, () => {
+      setInventoryItems((currentItems) => {
+        if (currentItems.some((item) => item.id === targetItem.id)) {
+          return currentItems
+        }
+
+        const nextItems = [...currentItems]
+        const insertIndex = Math.min(Math.max(targetIndex, 0), nextItems.length)
+        nextItems.splice(insertIndex, 0, targetItem)
+        return nextItems
+      })
+
+      addAuditEntry('Inventory', `${targetItem.name} removal undone.`)
+    })
   }
 
   const updatePrepItemStatus = (itemId: string, status: PrepStatus) => {
@@ -849,10 +938,25 @@ function App() {
 
   const handleRemoveEightySixItem = (itemId: string) => {
     const targetItem = eightySixItems.find((entry) => entry.id === itemId)
-    setEightySixItems((currentItems) => currentItems.filter((entry) => entry.id !== itemId))
-    if (targetItem) {
-      announceAction(`${targetItem.item} removed from 86'd items.`)
+    const targetIndex = eightySixItems.findIndex((entry) => entry.id === itemId)
+    if (!targetItem || !window.confirm(`Resolve ${targetItem.item} and remove it from menu changes?`)) {
+      return
     }
+
+    setEightySixItems((currentItems) => currentItems.filter((entry) => entry.id !== itemId))
+    announceAction(`${targetItem.item} removed from 86'd items.`)
+    queueUndoAction(`${targetItem.item} removed from menu changes.`, () => {
+      setEightySixItems((currentItems) => {
+        if (currentItems.some((entry) => entry.id === targetItem.id)) {
+          return currentItems
+        }
+
+        const nextItems = [...currentItems]
+        const insertIndex = Math.min(Math.max(targetIndex, 0), nextItems.length)
+        nextItems.splice(insertIndex, 0, targetItem)
+        return nextItems
+      })
+    })
   }
 
   const handleClearEightySixItems = () => {
@@ -860,9 +964,14 @@ function App() {
       return
     }
 
+    const previousItems = eightySixItems
+
     setEightySixItems([])
     setIsEightySixFormOpen(false)
     announceAction("All 86'd items cleared.")
+    queueUndoAction("All 86'd items cleared.", () => {
+      setEightySixItems(previousItems)
+    })
   }
 
   const handleClearAuditEntries = () => {
@@ -870,9 +979,16 @@ function App() {
       return
     }
 
+    const previousEntries = auditEntries
+    const previousFilter = auditFilter
+
     setAuditEntries([])
     setAuditFilter('All')
     announceAction('Activity log cleared.')
+    queueUndoAction('Activity log cleared.', () => {
+      setAuditEntries(previousEntries)
+      setAuditFilter(previousFilter)
+    })
   }
 
   return (
@@ -936,6 +1052,55 @@ function App() {
           </p>
         )}
 
+        {isFirstRun && (
+          <section className="onboarding-card" aria-label="First run setup">
+            <p className="eyebrow">Quick setup</p>
+            <h3>Start your shift in under a minute</h3>
+            <p>Add your first prep item, inventory watch item, and menu change to activate the dashboard.</p>
+            <div className="onboarding-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setIsPrepFormOpen(true)
+                  jumpToSection('prep-board')
+                }}
+              >
+                Add first prep item
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setIsInventoryFormOpen(true)
+                  jumpToSection('inventory')
+                }}
+              >
+                Add first inventory item
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setIsEightySixFormOpen(true)
+                  jumpToSection('eighty-six')
+                }}
+              >
+                Add first menu change
+              </button>
+            </div>
+          </section>
+        )}
+
+        {undoState && (
+          <div className="undo-toast" role="status" aria-live="polite">
+            <span>{undoState.message}</span>
+            <button className="secondary-button" type="button" onClick={handleUndoAction}>
+              Undo
+            </button>
+          </div>
+        )}
+
           <section id="snapshot" className="snapshot-grid" aria-label="Service snapshot">
           <section
               className="metric-card"
@@ -980,6 +1145,29 @@ function App() {
                 >
                   {isPrepFormOpen ? 'Cancel New Prep' : 'New Prep Entry'}
                 </button>
+              </div>
+
+              <div className="panel-toolbar" role="group" aria-label="Filter prep items">
+                <input
+                  className="toolbar-input"
+                  value={prepSearchQuery}
+                  onChange={(event) => setPrepSearchQuery(event.target.value)}
+                  placeholder="Search prep items"
+                  aria-label="Search prep items"
+                />
+                <select
+                  className="toolbar-select"
+                  value={prepStationFilter}
+                  onChange={(event) => setPrepStationFilter(event.target.value as PrepStationFilter)}
+                  aria-label="Filter prep by station"
+                >
+                  <option value="All">All stations</option>
+                  {stationNames.map((stationName) => (
+                    <option key={stationName} value={stationName}>
+                      {stationName}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {isPrepFormOpen && (
@@ -1042,9 +1230,20 @@ function App() {
               )}
 
               {visiblePrepItems.length === 0 ? (
-                <p className="prep-empty">All prep items are complete.</p>
+                <div className="empty-state">
+                  <p className="prep-empty">No open prep items yet. Add one to get started.</p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setIsPrepFormOpen(true)}
+                  >
+                    Add prep item
+                  </button>
+                </div>
+              ) : filteredPrepItems.length === 0 ? (
+                <p className="prep-empty">No prep items match your search or station filter.</p>
               ) : (
-                visiblePrepItems.map((item) => (
+                filteredPrepItems.map((item) => (
                   <article className="prep-card" key={item.id}>
                     <div className="prep-header-row">
                       <div>
@@ -1087,6 +1286,27 @@ function App() {
                 >
                   {isInventoryFormOpen ? 'Cancel Item' : 'Add Inventory Item'}
                 </button>
+              </div>
+
+              <div className="panel-toolbar" role="group" aria-label="Filter inventory items">
+                <input
+                  className="toolbar-input"
+                  value={inventorySearchQuery}
+                  onChange={(event) => setInventorySearchQuery(event.target.value)}
+                  placeholder="Search inventory"
+                  aria-label="Search inventory items"
+                />
+                <select
+                  className="toolbar-select"
+                  value={inventoryStatusFilter}
+                  onChange={(event) => setInventoryStatusFilter(event.target.value as InventoryStatusFilter)}
+                  aria-label="Filter inventory by status"
+                >
+                  <option value="All">All statuses</option>
+                  <option value="OK">OK</option>
+                  <option value="Low">Low</option>
+                  <option value="Critical">Critical</option>
+                </select>
               </div>
 
               {isInventoryFormOpen && (
@@ -1151,7 +1371,21 @@ function App() {
                 </form>
               )}
 
-              {inventoryItems.map((item) => (
+              {inventoryItems.length === 0 ? (
+                <div className="empty-state">
+                  <p className="prep-empty">No inventory items yet. Add stock to start tracking alerts.</p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setIsInventoryFormOpen(true)}
+                  >
+                    Add inventory item
+                  </button>
+                </div>
+              ) : filteredInventoryItems.length === 0 ? (
+                <p className="prep-empty">No inventory items match your search or status filter.</p>
+              ) : (
+                filteredInventoryItems.map((item) => (
                 <article className="inventory-item" key={item.id}>
                   {(() => {
                     const draftQuantity = inventoryQuantityDrafts[item.id]
@@ -1308,7 +1542,8 @@ function App() {
                     )
                   })()}
                 </article>
-              ))}
+                ))
+              )}
             </div>
           </section>
 
@@ -1377,7 +1612,16 @@ function App() {
               )}
 
               {eightySixItems.length === 0 ? (
-                <p className="prep-empty">No current menu changes.</p>
+                <div className="empty-state">
+                  <p className="prep-empty">No menu changes posted yet.</p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setIsEightySixFormOpen(true)}
+                  >
+                    Add menu change
+                  </button>
+                </div>
               ) : (
                 eightySixItems.map((entry) => (
                   <article className="eighty-six-item" key={entry.id}>
@@ -1497,15 +1741,21 @@ function App() {
             </div>
 
             <div className="notes-list">
-              {shiftNotes.map((note) => (
-                <article className="note-card" key={note.id}>
-                  <div className="note-meta">
-                    <span>{note.station}</span>
-                    <span>{note.timestamp}</span>
-                  </div>
-                  <p>{note.message}</p>
-                </article>
-              ))}
+              {shiftNotes.length === 0 ? (
+                <div className="empty-state">
+                  <p className="prep-empty">No shift notes yet. They will appear as you update prep and inventory.</p>
+                </div>
+              ) : (
+                shiftNotes.map((note) => (
+                  <article className="note-card" key={note.id}>
+                    <div className="note-meta">
+                      <span>{note.station}</span>
+                      <span>{note.timestamp}</span>
+                    </div>
+                    <p>{note.message}</p>
+                  </article>
+                ))
+              )}
 
               <div className="activity-panel">
                 <div className="panel-heading activity-heading">

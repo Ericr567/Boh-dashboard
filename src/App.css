@@ -382,8 +382,77 @@
   margin-top: 1rem;
 }
 
+.panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.toolbar-input,
+.toolbar-select {
+  background: rgba(8, 17, 31, 0.75);
+  border: 1px solid rgba(130, 148, 185, 0.25);
+  border-radius: 10px;
+  color: #f8fbff;
+  font: inherit;
+  min-height: 2.2rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.toolbar-input {
+  flex: 1 1 190px;
+}
+
+.toolbar-select {
+  flex: 0 1 170px;
+}
+
 .prep-empty {
   margin: 0;
+}
+
+.empty-state {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(130, 148, 185, 0.25);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem;
+}
+
+.onboarding-card {
+  background: linear-gradient(140deg, rgba(73, 221, 187, 0.14), rgba(78, 109, 242, 0.14));
+  border: 1px solid rgba(130, 148, 185, 0.2);
+  border-radius: 20px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.onboarding-card h3 {
+  margin: 0;
+}
+
+.onboarding-card p {
+  margin: 0;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.undo-toast {
+  align-items: center;
+  background: rgba(8, 17, 31, 0.9);
+  border: 1px solid rgba(73, 221, 187, 0.35);
+  border-radius: 14px;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  padding: 0.7rem 0.85rem;
 }
 
 .prep-card,
@@ -695,6 +764,13 @@
   .dashboard-grid,
   .station-grid {
     grid-template-columns: 1fr;
+  }
+
+  .panel-toolbar,
+  .onboarding-actions,
+  .undo-toast {
+    align-items: stretch;
+    flex-direction: column;
   }
 
 }
