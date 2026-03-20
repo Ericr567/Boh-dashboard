@@ -317,6 +317,15 @@ const sectionLabels = {
 type SectionId = keyof typeof sectionLabels
 const sectionIds = Object.keys(sectionLabels) as SectionId[]
 
+const sectionShortLabels: Record<SectionId, string> = {
+  snapshot: 'Home',
+  'prep-board': 'Prep',
+  stations: 'Stations',
+  inventory: 'Stock',
+  'eighty-six': "86'd",
+  notes: 'Notes',
+}
+
 const isSectionId = (value: string): value is SectionId => sectionIds.includes(value as SectionId)
 
 const formatCurrentTime = () =>
@@ -395,6 +404,8 @@ function App() {
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState<InventoryStatusFilter>('All')
   const [undoState, setUndoState] = useState<UndoState | null>(null)
   const [backupError, setBackupError] = useState('')
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isFabOpen, setIsFabOpen] = useState(false)
   const [now, setNow] = useState(() => new Date())
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [selectedPrepIds, setSelectedPrepIds] = useState<Set<string>>(new Set())
@@ -1158,9 +1169,26 @@ function App() {
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {actionAnnouncement}
       </div>
-      <aside className="sidebar">
+      {isSidebarOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside className={`sidebar${isSidebarOpen ? ' sidebar--open' : ''}`}>
         <div>
-          <p className="brand-kicker">BOH operations</p>
+          <div className="sidebar-header">
+            <p className="brand-kicker">BOH operations</p>
+            <button
+              className="sidebar-close"
+              type="button"
+              onClick={() => setIsSidebarOpen(false)}
+              aria-label="Close menu"
+            >
+              ✕
+            </button>
+          </div>
           <h1 className="brand-title">LineFlow</h1>
           <p className="brand-copy">
             A live dashboard for prep visibility, low-stock awareness, and shift handoff.
@@ -1174,6 +1202,7 @@ function App() {
               className={activeSection === sectionId ? 'is-active' : undefined}
               href={`#${sectionId}`}
               aria-current={activeSection === sectionId ? 'location' : undefined}
+              onClick={() => setIsSidebarOpen(false)}
             >
               {sectionLabels[sectionId]}
             </a>
@@ -1222,6 +1251,15 @@ function App() {
           </div>
 
           <div className="topbar-meta">
+            <button
+              className="hamburger-button"
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={isSidebarOpen}
+            >
+              ☰
+            </button>
             <div className="shift-pill">
               <span>{shiftLabel}</span>
               <strong>{dateLabel}</strong>
@@ -2050,6 +2088,76 @@ function App() {
           </section>
           </section>
       </main>
+
+      <nav className="bottom-tab-bar" aria-label="Quick navigation">
+        {sectionIds.map((sectionId) => (
+          <a
+            key={sectionId}
+            href={`#${sectionId}`}
+            className={`bottom-tab${activeSection === sectionId ? ' is-active' : ''}`}
+            onClick={() => { setActiveSection(sectionId); setIsFabOpen(false) }}
+            aria-current={activeSection === sectionId ? 'location' : undefined}
+          >
+            {sectionShortLabels[sectionId]}
+          </a>
+        ))}
+      </nav>
+
+      <div className="fab-container">
+        {isFabOpen && (
+          <>
+            <div
+              className="fab-backdrop"
+              onClick={() => setIsFabOpen(false)}
+              aria-hidden="true"
+            />
+            <div className="fab-sheet" role="menu">
+              <button
+                type="button"
+                className="fab-option"
+                onClick={() => {
+                  setIsPrepFormOpen(true)
+                  jumpToSection('prep-board')
+                  setIsFabOpen(false)
+                }}
+              >
+                New Prep Item
+              </button>
+              <button
+                type="button"
+                className="fab-option"
+                onClick={() => {
+                  setIsInventoryFormOpen(true)
+                  jumpToSection('inventory')
+                  setIsFabOpen(false)
+                }}
+              >
+                Add Inventory Item
+              </button>
+              <button
+                type="button"
+                className="fab-option"
+                onClick={() => {
+                  setIsEightySixFormOpen(true)
+                  jumpToSection('eighty-six')
+                  setIsFabOpen(false)
+                }}
+              >
+                86 an Item
+              </button>
+            </div>
+          </>
+        )}
+        <button
+          className={`fab${isFabOpen ? ' fab--open' : ''}`}
+          type="button"
+          onClick={() => setIsFabOpen((open) => !open)}
+          aria-label={isFabOpen ? 'Close quick add' : 'Quick add'}
+          aria-expanded={isFabOpen}
+        >
+          {isFabOpen ? '✕' : '+'}
+        </button>
+      </div>
     </div>
   )
 }

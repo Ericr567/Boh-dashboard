@@ -723,6 +723,143 @@
   padding: 0.9rem;
 }
 
+/* ─── Mobile-only elements (hidden on desktop) ──── */
+.hamburger-button,
+.sidebar-close,
+.bottom-tab-bar,
+.fab-container {
+  display: none;
+}
+
+.sidebar-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ─── Sidebar overlay ────────────────────────────── */
+.sidebar-overlay {
+  background: rgba(4, 7, 17, 0.6);
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 199;
+}
+
+/* ─── Bottom tab bar ─────────────────────────────── */
+.bottom-tab-bar {
+  background: linear-gradient(180deg, rgba(26, 34, 56, 0.98), rgba(15, 20, 35, 1));
+  border-top: 1px solid rgba(112, 140, 185, 0.18);
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  z-index: 100;
+}
+
+.bottom-tab {
+  align-items: center;
+  color: rgba(180, 200, 230, 0.5);
+  display: flex;
+  flex: 1;
+  font-size: 0.72rem;
+  font-weight: 500;
+  justify-content: center;
+  letter-spacing: 0.03em;
+  min-height: 56px;
+  padding: 0.4rem 0.15rem;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.bottom-tab.is-active {
+  color: #49ddbb;
+  font-weight: 600;
+}
+
+/* ─── FAB ───────────────────────────────────────── */
+.fab-container {
+  align-items: flex-end;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: fixed;
+  right: 1.25rem;
+  z-index: 150;
+}
+
+.fab {
+  align-items: center;
+  background: #49ddbb;
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(73, 221, 187, 0.4);
+  color: #08111f;
+  cursor: pointer;
+  display: flex;
+  font-size: 1.6rem;
+  font-weight: 300;
+  height: 56px;
+  justify-content: center;
+  line-height: 1;
+  transition: transform 220ms ease, background 220ms ease, box-shadow 220ms ease;
+  width: 56px;
+}
+
+.fab:hover {
+  box-shadow: 0 6px 28px rgba(73, 221, 187, 0.55);
+}
+
+.fab--open {
+  background: #ff6450;
+  box-shadow: 0 4px 20px rgba(255, 100, 80, 0.4);
+  color: #fff;
+  transform: rotate(45deg);
+}
+
+.fab-backdrop {
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 149;
+}
+
+.fab-sheet {
+  background: linear-gradient(180deg, rgba(28, 37, 60, 0.98), rgba(15, 20, 35, 0.99));
+  border: 1px solid rgba(112, 140, 185, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(4, 7, 17, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 190px;
+  padding: 0.4rem;
+}
+
+.fab-option {
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: rgba(220, 235, 255, 0.88);
+  cursor: pointer;
+  font-size: 0.92rem;
+  padding: 0.8rem 1rem;
+  text-align: left;
+  transition: background 130ms ease, color 130ms ease;
+}
+
+.fab-option:hover,
+.fab-option:focus-visible {
+  background: rgba(73, 221, 187, 0.12);
+  color: #49ddbb;
+  outline: none;
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -845,51 +982,135 @@
 }
 
 /* ─── Print styles ───────────────────────────────── */
-@media print {
-  .sidebar,
-  .skip-link,
-  .sr-only,
-  .offline-banner,
-  .undo-toast,
-  .onboarding-card,
-  .prep-actions,
-  .panel-toolbar,
-  .action-button,
-  .secondary-button,
-  .prep-select-label,
-  .inventory-actions,
-  .activity-panel {
-    display: none !important;
-  }
-
+@media (max-width: 720px) {
   .app-shell {
-    display: block;
-    padding: 0;
+    padding: 1rem;
   }
 
-  .dashboard {
-    padding: 1cm;
+  .prep-form {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-form {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar,
+  .panel-heading,
+  .prep-header-row,
+  .inventory-item,
+  .station-head,
+  .note-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar {
+    padding-right: 3rem;
+    position: relative;
   }
 
   .snapshot-grid,
-  .dashboard-grid {
-    grid-template-columns: 1fr 1fr;
+  .dashboard-grid,
+  .station-grid {
+    grid-template-columns: 1fr;
   }
 
-  .metric-card,
-  .panel,
-  .prep-card {
-    background: #fff !important;
-    border: 1px solid #ccc !important;
-    box-shadow: none !important;
-    color: #111 !important;
+  .panel-toolbar,
+  .onboarding-actions,
+  .undo-toast {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .handoff-message {
-    border: 1px solid #999;
-    border-radius: 6px;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    padding: 0.75rem 1rem;
+  /* Larger touch targets on mobile */
+  .action-button,
+  .secondary-button,
+  .mark-ready-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .prep-select-checkbox {
+    height: 22px;
+    width: 22px;
+  }
+
+  /* Show mobile-only elements */
+  .hamburger-button {
+    align-items: center;
+    background: transparent;
+    border: 1px solid rgba(112, 140, 185, 0.25);
+    border-radius: 10px;
+    color: rgba(180, 200, 230, 0.8);
+    cursor: pointer;
+    display: flex;
+    font-size: 1.2rem;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    width: 38px;
+  }
+
+  .sidebar-close {
+    align-items: center;
+    background: transparent;
+    border: 1px solid rgba(112, 140, 185, 0.2);
+    border-radius: 8px;
+    color: rgba(180, 200, 230, 0.7);
+    cursor: pointer;
+    display: flex;
+    font-size: 0.9rem;
+    height: 32px;
+    justify-content: center;
+    padding: 0;
+    width: 32px;
+  }
+
+  .bottom-tab-bar {
+    display: flex;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .fab-container {
+    display: flex;
+  }
+
+  /* Sidebar becomes fixed drawer */
+  .sidebar {
+    border-radius: 0 20px 20px 0;
+    bottom: 0;
+    left: 0;
+    overflow-y: auto;
+    position: fixed;
+    top: 0;
+    transform: translateX(-110%);
+    transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
+    width: min(300px, 86vw);
+    z-index: 200;
+  }
+
+  .sidebar--open {
+    box-shadow: 8px 0 48px rgba(4, 7, 17, 0.7);
+    transform: translateX(0);
+  }
+
+  /* Bottom padding to clear fixed bottom tab bar */
+  .dashboard {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Font size floor for small text */
+  .priority-chip,
+  .urgency-badge {
+    font-size: 0.8rem;
+  }
+
+  .note-meta span,
+  .prep-meta span {
+    font-size: 0.8rem;
   }
 }
