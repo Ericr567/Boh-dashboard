@@ -55,13 +55,11 @@ type UndoState = {
 
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
 
-const initialPrepItems: PrepItem[] = []
 const initialInventoryItems: InventoryItem[] = []
 const initialEightySixItems: EightySixItem[] = []
 const initialShiftNotes: ShiftNote[] = []
 const initialAuditEntries: AuditEntry[] = []
 
-const legacySeededPrepIds = new Set(['prep-1', 'prep-2', 'prep-3', 'prep-4'])
 const legacySeededInventoryIds = new Set(['inv-1', 'inv-2', 'inv-3'])
 const legacySeededEightySixIds = new Set(['eighty-six-1', 'eighty-six-2', 'eighty-six-3'])
 const legacySeededShiftNoteIds = new Set(['note-1', 'note-2', 'note-3'])
@@ -104,40 +102,6 @@ const normalizeStationName = (value: unknown, fallback: StationName): StationNam
   }
 
   return fallback
-}
-
-const isPrepStatus = (value: unknown): value is PrepStatus =>
-  value === 'Not Started' || value === 'In Progress' || value === 'Ready'
-
-const isPrepPriority = (value: unknown): value is PrepPriority =>
-  value === 'Low' || value === 'Medium' || value === 'High'
-
-const loadStoredPrepItems = (value: unknown): PrepItem[] => {
-  if (!Array.isArray(value)) {
-    return initialPrepItems
-  }
-
-  return value
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return null
-      }
-
-      const item = entry as Record<string, unknown>
-      if (typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.dueTime !== 'string') {
-        return null
-      }
-
-      return {
-        id: item.id,
-        name: item.name,
-        station: normalizeStationName(item.station, 'Pantry'),
-        priority: isPrepPriority(item.priority) ? item.priority : 'Medium',
-        status: isPrepStatus(item.status) ? item.status : 'Not Started',
-        dueTime: item.dueTime,
-      }
-    })
-    .filter((item): item is PrepItem => item !== null && !legacySeededPrepIds.has(item.id))
 }
 
 const loadStoredInventoryItems = (value: unknown): InventoryItem[] => {
@@ -330,9 +294,7 @@ const getStationDomId = (stationName: StationName) =>
   `station-toggle-${stationName.toLowerCase().replace(/\s+/g, '-')}`
 
 function App() {
-  const [prepItems, setPrepItems] = useState<PrepItem[]>(() =>
-    loadStoredState(storageKeys.prepItems, initialPrepItems, loadStoredPrepItems),
-  )
+  const [prepItems, setPrepItems] = useState<PrepItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
     loadStoredState(storageKeys.inventoryItems, initialInventoryItems, loadStoredInventoryItems),
   )
