@@ -46,167 +46,19 @@ type AuditEntry = {
 
 type AuditFilter = 'All' | AuditEntry['category']
 
-type StationStatus = {
-  id: string
-  name: StationName
-  workload: 'Light' | 'Moderate' | 'Heavy'
-}
-
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
 
-const initialPrepItems: PrepItem[] = [
-  {
-    id: 'prep-1',
-    name: 'Burger patties',
-    station: 'Grill',
-    priority: 'High',
-    status: 'In Progress',
-    dueTime: '11:00 AM',
-  },
-  {
-    id: 'prep-2',
-    name: 'Pickled onions',
-    station: 'Pantry',
-    priority: 'Medium',
-    status: 'Ready',
-    dueTime: '10:30 AM',
-  },
-  {
-    id: 'prep-3',
-    name: 'Aioli batch',
-    station: 'Pantry',
-    priority: 'High',
-    status: 'Not Started',
-    dueTime: '11:15 AM',
-  },
-  {
-    id: 'prep-4',
-    name: 'Creme brulee base',
-    station: 'Pastry',
-    priority: 'Low',
-    status: 'Ready',
-    dueTime: '10:45 AM',
-  },
-]
+const initialPrepItems: PrepItem[] = []
+const initialInventoryItems: InventoryItem[] = []
+const initialEightySixItems: EightySixItem[] = []
+const initialShiftNotes: ShiftNote[] = []
+const initialAuditEntries: AuditEntry[] = []
 
-const initialInventoryItems: InventoryItem[] = [
-  {
-    id: 'inv-1',
-    name: 'Salmon portions',
-    quantity: 4,
-    unit: 'left',
-    threshold: 6,
-  },
-  {
-    id: 'inv-2',
-    name: 'Brioche buns',
-    quantity: 12,
-    unit: 'count',
-    threshold: 10,
-  },
-  {
-    id: 'inv-3',
-    name: 'Fryer oil reserve',
-    quantity: 1,
-    unit: 'jug',
-    threshold: 2,
-  },
-]
-
-const initialEightySixItems: EightySixItem[] = [
-  {
-    id: 'eighty-six-1',
-    item: 'Salmon entree',
-    change: 'Route guests to striped bass feature until next delivery.',
-    timestamp: '5:40 PM',
-  },
-  {
-    id: 'eighty-six-2',
-    item: 'Truffle aioli',
-    change: 'Swap to lemon aioli on fries and burger add-ons.',
-    timestamp: '5:18 PM',
-  },
-  {
-    id: 'eighty-six-3',
-    item: 'Lemon tart slice',
-    change: 'Offer creme brulee or chocolate budino for dessert push.',
-    timestamp: '4:55 PM',
-  },
-]
-
-const initialShiftNotes: ShiftNote[] = [
-  {
-    id: 'note-1',
-    station: 'Expo',
-    message: '86 salmon after current tickets. Push chicken feature if needed.',
-    timestamp: '5:42 PM',
-  },
-  {
-    id: 'note-2',
-    station: 'Pantry',
-    message: 'Extra aioli needed before dinner rush. Make one backup squeeze bottle.',
-    timestamp: '5:30 PM',
-  },
-  {
-    id: 'note-3',
-    station: 'Grill',
-    message: 'Flat top cleaned and reset. Steak temp chart posted near pass.',
-    timestamp: '5:12 PM',
-  },
-]
-
-const initialAuditEntries: AuditEntry[] = [
-  {
-    id: 'audit-1',
-    category: 'Prep',
-    message: 'Burger patties remain in progress on Grill.',
-    timestamp: '10:48 AM',
-  },
-  {
-    id: 'audit-2',
-    category: 'Inventory',
-    message: 'Salmon portions dropped below threshold and need a delivery check.',
-    timestamp: '10:32 AM',
-  },
-]
-
-const stationStatuses: StationStatus[] = [
-  {
-    id: 'station-1',
-    name: 'Grill',
-    workload: 'Heavy',
-  },
-  {
-    id: 'station-2',
-    name: 'Saute',
-    workload: 'Moderate',
-  },
-  {
-    id: 'station-3',
-    name: 'Pastry',
-    workload: 'Light',
-  },
-  {
-    id: 'station-4',
-    name: 'Pantry',
-    workload: 'Moderate',
-  },
-  {
-    id: 'station-5',
-    name: 'Expo',
-    workload: 'Heavy',
-  },
-  {
-    id: 'station-6',
-    name: 'Head Chef',
-    workload: 'Moderate',
-  },
-  {
-    id: 'station-7',
-    name: 'Sous Chef',
-    workload: 'Moderate',
-  },
-]
+const legacySeededPrepIds = new Set(['prep-1', 'prep-2', 'prep-3', 'prep-4'])
+const legacySeededInventoryIds = new Set(['inv-1', 'inv-2', 'inv-3'])
+const legacySeededEightySixIds = new Set(['eighty-six-1', 'eighty-six-2', 'eighty-six-3'])
+const legacySeededShiftNoteIds = new Set(['note-1', 'note-2', 'note-3'])
+const legacySeededAuditIds = new Set(['audit-1', 'audit-2'])
 
 const storageKeys = {
   prepItems: 'lineflow.prepItems',
@@ -278,7 +130,7 @@ const loadStoredPrepItems = (value: unknown): PrepItem[] => {
         dueTime: item.dueTime,
       }
     })
-    .filter((item): item is PrepItem => item !== null)
+    .filter((item): item is PrepItem => item !== null && !legacySeededPrepIds.has(item.id))
 }
 
 const loadStoredInventoryItems = (value: unknown): InventoryItem[] => {
@@ -308,7 +160,7 @@ const loadStoredInventoryItems = (value: unknown): InventoryItem[] => {
         threshold: Number.isFinite(threshold) ? Math.max(1, Math.floor(threshold)) : 1,
       }
     })
-    .filter((item): item is InventoryItem => item !== null)
+    .filter((item): item is InventoryItem => item !== null && !legacySeededInventoryIds.has(item.id))
 }
 
 const loadStoredEightySixItems = (value: unknown): EightySixItem[] => {
@@ -339,7 +191,7 @@ const loadStoredEightySixItems = (value: unknown): EightySixItem[] => {
         timestamp: item.timestamp,
       }
     })
-    .filter((item): item is EightySixItem => item !== null)
+    .filter((item): item is EightySixItem => item !== null && !legacySeededEightySixIds.has(item.id))
 }
 
 const loadStoredShiftNotes = (value: unknown): ShiftNote[] => {
@@ -369,7 +221,7 @@ const loadStoredShiftNotes = (value: unknown): ShiftNote[] => {
         timestamp: note.timestamp,
       }
     })
-    .filter((note): note is ShiftNote => note !== null)
+    .filter((note): note is ShiftNote => note !== null && !legacySeededShiftNoteIds.has(note.id))
 }
 
 const loadStoredAuditEntries = (value: unknown): AuditEntry[] => {
@@ -399,7 +251,7 @@ const loadStoredAuditEntries = (value: unknown): AuditEntry[] => {
         timestamp: auditEntry.timestamp,
       }
     })
-    .filter((entry): entry is AuditEntry => entry !== null)
+    .filter((entry): entry is AuditEntry => entry !== null && !legacySeededAuditIds.has(entry.id))
 }
 
 const loadStoredState = <T,>(key: string, fallback: T, normalize: (value: unknown) => T): T => {
@@ -518,21 +370,31 @@ function App() {
     (item) => getInventoryStatus(item.quantity, item.threshold) !== 'OK',
   ).length
 
-  const workloadByStation = stationStatuses.reduce<Record<StationName, StationStatus['workload']>>(
-    (accumulator, station) => {
-      accumulator[station.name] = station.workload
-      return accumulator
-    },
-    {
-      Grill: 'Moderate',
-      Saute: 'Moderate',
-      Pastry: 'Moderate',
-      Pantry: 'Moderate',
-      Expo: 'Moderate',
-      'Head Chef': 'Moderate',
-      'Sous Chef': 'Moderate',
-    },
-  )
+  const workloadByStation = stationNames.reduce<
+    Record<StationName, 'Light' | 'Moderate' | 'Heavy'>
+  >((accumulator, stationName) => {
+    const activeTasks = prepItems.filter(
+      (item) => item.station === stationName && item.status !== 'Ready',
+    ).length
+
+    if (activeTasks >= 3) {
+      accumulator[stationName] = 'Heavy'
+    } else if (activeTasks >= 1) {
+      accumulator[stationName] = 'Moderate'
+    } else {
+      accumulator[stationName] = 'Light'
+    }
+
+    return accumulator
+  }, {
+    Grill: 'Light',
+    Saute: 'Light',
+    Pastry: 'Light',
+    Pantry: 'Light',
+    Expo: 'Light',
+    'Head Chef': 'Light',
+    'Sous Chef': 'Light',
+  })
 
   const stationSummaries = stationNames.map((stationName) => {
     const stationPrepItems = prepItems.filter((item) => item.station === stationName)
