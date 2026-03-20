@@ -140,6 +140,17 @@
   color: #c8d4eb;
 }
 
+.sidebar-note {
+  margin-top: 0.8rem;
+}
+
+.sidebar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
 .dashboard {
   display: grid;
   gap: 1.5rem;

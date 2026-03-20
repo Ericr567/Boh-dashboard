@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import './App.css'
 
 type StationName = 'Grill' | 'Saute' | 'Pastry' | 'Pantry' | 'Expo' | 'Head Chef' | 'Sous Chef'
@@ -53,6 +53,16 @@ type UndoState = {
   onUndo: () => void
 }
 
+type BackupPayload = {
+  version: 1
+  exportedAt: string
+  prepItems: PrepItem[]
+  inventoryItems: InventoryItem[]
+  eightySixItems: EightySixItem[]
+  shiftNotes: ShiftNote[]
+  auditEntries: AuditEntry[]
+}
+
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
 
 const initialInventoryItems: InventoryItem[] = []
@@ -102,6 +112,49 @@ const normalizeStationName = (value: unknown, fallback: StationName): StationNam
   }
 
   return fallback
+}
+
+const isPrepStatus = (value: unknown): value is PrepStatus =>
+  value === 'Not Started' || value === 'In Progress' || value === 'Ready'
+
+const isPrepPriority = (value: unknown): value is PrepPriority =>
+  value === 'Low' || value === 'Medium' || value === 'High'
+
+const normalizeImportedPrepItems = (value: unknown): PrepItem[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const item = entry as Record<string, unknown>
+      if (typeof item.name !== 'string' || typeof item.dueTime !== 'string') {
+        return null
+      }
+
+      return {
+        id: typeof item.id === 'string' ? item.id : createRuntimeId('prep'),
+        name: item.name,
+        station: normalizeStationName(item.station, 'Pantry'),
+        priority: isPrepPriority(item.priority) ? item.priority : 'Medium',
+        status: isPrepStatus(item.status) ? item.status : 'Not Started',
+        dueTime: item.dueTime,
+      }
+    })
+    .filter((item): item is PrepItem => item !== null)
+}
+
+const isBackupPayload = (value: unknown): value is BackupPayload => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const backup = value as Record<string, unknown>
+  return backup.version === 1
 }
 
 const loadStoredInventoryItems = (value: unknown): InventoryItem[] => {
@@ -337,7 +390,9 @@ function App() {
   const [inventorySearchQuery, setInventorySearchQuery] = useState('')
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState<InventoryStatusFilter>('All')
   const [undoState, setUndoState] = useState<UndoState | null>(null)
+  const [backupError, setBackupError] = useState('')
   const undoTimeoutRef = useRef<number | null>(null)
+  const importFileRef = useRef<HTMLInputElement | null>(null)
 
   const openPrepCount = prepItems.filter((item) => item.status !== 'Ready').length
   const readyPrepCount = prepItems.filter((item) => item.status === 'Ready').length
@@ -510,6 +565,65 @@ function App() {
   const jumpToSection = (sectionId: SectionId) => {
     setActiveSection(sectionId)
     window.location.hash = sectionId
+  }
+
+  const handleExportData = () => {
+    try {
+      const payload: BackupPayload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        prepItems,
+        inventoryItems,
+        eightySixItems,
+        shiftNotes,
+        auditEntries,
+      }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const dateStamp = new Date().toISOString().slice(0, 10)
+      link.href = url
+      link.download = `lineflow-backup-${dateStamp}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      setBackupError('')
+      announceAction('Data exported to backup file.')
+    } catch {
+      setBackupError('Could not export your data. Please try again.')
+    }
+  }
+
+  const handleRequestImport = () => {
+    importFileRef.current?.click()
+  }
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text) as unknown
+
+      if (!isBackupPayload(parsed)) {
+        throw new Error('invalid backup')
+      }
+
+      const backup = parsed as Record<string, unknown>
+      setPrepItems(normalizeImportedPrepItems(backup.prepItems))
+      setInventoryItems(loadStoredInventoryItems(backup.inventoryItems))
+      setEightySixItems(loadStoredEightySixItems(backup.eightySixItems))
+      setShiftNotes(loadStoredShiftNotes(backup.shiftNotes))
+      setAuditEntries(loadStoredAuditEntries(backup.auditEntries))
+      setBackupError('')
+      announceAction('Backup imported successfully.')
+    } catch {
+      setBackupError('Backup file could not be imported. Use a LineFlow backup JSON file.')
+    }
   }
 
   const addShiftNote = (station: StationName, message: string) => {
@@ -987,6 +1101,29 @@ function App() {
           <span className="sidebar-label">Current shift</span>
           <strong>Dinner push</strong>
           <p>Focus on prep completion before 5:30 PM and watch critical stock counts.</p>
+          <p className="sidebar-note">Data is stored locally in this browser.</p>
+          <div className="sidebar-actions">
+            <button className="secondary-button" type="button" onClick={handleExportData}>
+              Export Backup
+            </button>
+            <button className="secondary-button" type="button" onClick={handleRequestImport}>
+              Import Backup
+            </button>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept="application/json"
+              onChange={handleImportFileChange}
+              className="sr-only"
+              tabIndex={-1}
+              aria-label="Import LineFlow backup"
+            />
+          </div>
+          {backupError && (
+            <p className="form-error" role="alert">
+              {backupError}
+            </p>
+          )}
         </div>
       </aside>
 
