@@ -1310,6 +1310,29 @@
   outline-offset: 3px;
 }
 
+.done-button {
+  background: rgba(73, 221, 187, 0.1);
+  border: 1px solid rgba(73, 221, 187, 0.32);
+  border-radius: 999px;
+  color: #77f2d2;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.4rem 0.95rem;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.done-button:hover {
+  background: rgba(73, 221, 187, 0.2);
+  border-color: rgba(73, 221, 187, 0.55);
+}
+
+.done-button:focus-visible {
+  outline: 3px solid rgba(73, 221, 187, 0.7);
+  outline-offset: 3px;
+}
+
 /* ─── Print Styles ───────────────────────────────── */
 @media print {
   *,

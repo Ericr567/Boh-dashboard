@@ -1660,6 +1660,17 @@ function App() {
                         </button>
                       </div>
                     )}
+                    {item.status === 'In Progress' && (
+                      <div className="prep-card-fire">
+                        <button
+                          className="done-button"
+                          type="button"
+                          onClick={() => updatePrepItemStatus(item.id, 'Ready')}
+                        >
+                          Mark Ready ✓
+                        </button>
+                      </div>
+                    )}
                   </article>
                   )
                 })
