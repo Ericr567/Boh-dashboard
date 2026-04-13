@@ -50,6 +50,22 @@ type AuditFilter = 'All' | AuditEntry['category']
 type PrepStationFilter = 'All' | StationName
 type InventoryStatusFilter = 'All' | 'OK' | 'Low' | 'Critical'
 
+type RecipeCategory = 'Sauce' | 'Protein' | 'Sides' | 'Dessert' | 'Soup' | 'Salad' | 'Bake' | 'Other'
+
+type Recipe = {
+  id: string
+  name: string
+  station: StationName
+  category: RecipeCategory
+  recipeYield: string
+  prepTime: string
+  ingredients: string
+  instructions: string
+  notes: string
+}
+
+type RecipeCategoryFilter = 'All' | RecipeCategory
+
 type UndoState = {
   message: string
   onUndo: () => void
@@ -63,9 +79,12 @@ type BackupPayload = {
   eightySixItems: EightySixItem[]
   shiftNotes: ShiftNote[]
   auditEntries: AuditEntry[]
+  recipes?: Recipe[]
 }
 
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
+
+const recipeCategories: RecipeCategory[] = ['Sauce', 'Protein', 'Sides', 'Dessert', 'Soup', 'Salad', 'Bake', 'Other']
 
 const initialInventoryItems: InventoryItem[] = []
 const initialEightySixItems: EightySixItem[] = []
@@ -84,6 +103,7 @@ const storageKeys = {
   shiftNotes: 'lineflow.shiftNotes',
   auditEntries: 'lineflow.auditEntries',
   serviceTime: 'lineflow.serviceTime',
+  recipes: 'lineflow.recipes',
 } as const
 
 let fallbackIdCounter = 0
@@ -288,6 +308,28 @@ const loadStoredAuditEntries = (value: unknown): AuditEntry[] => {
     .filter((entry): entry is AuditEntry => entry !== null && !legacySeededAuditIds.has(entry.id))
 }
 
+const loadStoredRecipes = (value: unknown): Recipe[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const r = entry as Record<string, unknown>
+      if (typeof r.id !== 'string' || typeof r.name !== 'string') return null
+      return {
+        id: r.id,
+        name: r.name,
+        station: normalizeStationName(r.station, 'Pantry'),
+        category: recipeCategories.includes(r.category as RecipeCategory) ? r.category as RecipeCategory : 'Other',
+        recipeYield: typeof r.recipeYield === 'string' ? r.recipeYield : '',
+        prepTime: typeof r.prepTime === 'string' ? r.prepTime : '',
+        ingredients: typeof r.ingredients === 'string' ? r.ingredients : '',
+        instructions: typeof r.instructions === 'string' ? r.instructions : '',
+        notes: typeof r.notes === 'string' ? r.notes : '',
+      }
+    })
+    .filter((r): r is Recipe => r !== null)
+}
+
 const loadStoredState = <T,>(key: string, fallback: T, normalize: (value: unknown) => T): T => {
   if (typeof window === 'undefined') {
     return fallback
@@ -318,6 +360,7 @@ const sectionLabels = {
   inventory: 'Inventory',
   'eighty-six': "86'd Items",
   notes: 'Shift Notes',
+  recipes: 'Recipe Book',
 } as const
 
 type SectionId = keyof typeof sectionLabels
@@ -330,6 +373,7 @@ const sectionShortLabels: Record<SectionId, string> = {
   inventory: 'Stock',
   'eighty-six': "86'd",
   notes: 'Notes',
+  recipes: 'Recipes',
 }
 
 const isSectionId = (value: string): value is SectionId => sectionIds.includes(value as SectionId)
@@ -427,6 +471,22 @@ function App() {
   })
   const [isEditingServiceTime, setIsEditingServiceTime] = useState(false)
   const [serviceTimeDraft, setServiceTimeDraft] = useState('')
+  const [recipes, setRecipes] = useState<Recipe[]>(() =>
+    loadStoredState(storageKeys.recipes, [], loadStoredRecipes),
+  )
+  const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false)
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
+  const [newRecipeName, setNewRecipeName] = useState('')
+  const [newRecipeStation, setNewRecipeStation] = useState<StationName>('Pantry')
+  const [newRecipeCategory, setNewRecipeCategory] = useState<RecipeCategory>('Other')
+  const [newRecipeYield, setNewRecipeYield] = useState('')
+  const [newRecipePrepTime, setNewRecipePrepTime] = useState('')
+  const [newRecipeIngredients, setNewRecipeIngredients] = useState('')
+  const [newRecipeInstructions, setNewRecipeInstructions] = useState('')
+  const [newRecipeNotes, setNewRecipeNotes] = useState('')
+  const [recipeSearchQuery, setRecipeSearchQuery] = useState('')
+  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<RecipeCategoryFilter>('All')
+  const [recipeStationFilter, setRecipeStationFilter] = useState<PrepStationFilter>('All')
   const undoTimeoutRef = useRef<number | null>(null)
   const importFileRef = useRef<HTMLInputElement | null>(null)
 
@@ -576,6 +636,14 @@ function App() {
   const filteredAuditEntries = auditEntries.filter(
     (entry) => auditFilter === 'All' || entry.category === auditFilter,
   )
+
+  const filteredRecipes = recipes.filter((r) => {
+    const q = recipeSearchQuery.trim().toLowerCase()
+    const matchesQuery = !q || r.name.toLowerCase().includes(q) || r.ingredients.toLowerCase().includes(q)
+    const matchesCategory = recipeCategoryFilter === 'All' || r.category === recipeCategoryFilter
+    const matchesStation = recipeStationFilter === 'All' || r.station === recipeStationFilter
+    return matchesQuery && matchesCategory && matchesStation
+  })
   const isFirstRun =
     prepItems.length === 0 &&
     inventoryItems.length === 0 &&
@@ -638,6 +706,7 @@ function App() {
         eightySixItems,
         shiftNotes,
         auditEntries,
+        recipes,
       }
 
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
@@ -680,6 +749,9 @@ function App() {
       setEightySixItems(loadStoredEightySixItems(backup.eightySixItems))
       setShiftNotes(loadStoredShiftNotes(backup.shiftNotes))
       setAuditEntries(loadStoredAuditEntries(backup.auditEntries))
+      if (backup.recipes !== undefined) {
+        setRecipes(loadStoredRecipes(backup.recipes))
+      }
       setBackupError('')
       announceAction('Backup imported successfully.')
     } catch {
@@ -831,6 +903,12 @@ function App() {
   }, [serviceTime])
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(storageKeys.recipes, JSON.stringify(recipes))
+    }
+  }, [recipes])
+
+  useEffect(() => {
     return () => {
       if (undoTimeoutRef.current !== null) {
         window.clearTimeout(undoTimeoutRef.current)
@@ -871,6 +949,9 @@ function App() {
       } else if (event.key === 'i' || event.key === 'I') {
         setIsInventoryFormOpen(true)
         jumpToSection('inventory')
+      } else if (event.key === 'r' || event.key === 'R') {
+        setIsRecipeFormOpen(true)
+        jumpToSection('recipes')
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -1203,6 +1284,52 @@ function App() {
       setServiceTime(trimmed)
     }
     setIsEditingServiceTime(false)
+  }
+
+  const handleAddRecipe = () => {
+    const name = newRecipeName.trim()
+    if (!name) return
+    setRecipes((current) => [
+      {
+        id: createRuntimeId('recipe'),
+        name,
+        station: newRecipeStation,
+        category: newRecipeCategory,
+        recipeYield: newRecipeYield.trim(),
+        prepTime: newRecipePrepTime.trim(),
+        ingredients: newRecipeIngredients.trim(),
+        instructions: newRecipeInstructions.trim(),
+        notes: newRecipeNotes.trim(),
+      },
+      ...current,
+    ])
+    setNewRecipeName('')
+    setNewRecipeStation('Pantry')
+    setNewRecipeCategory('Other')
+    setNewRecipeYield('')
+    setNewRecipePrepTime('')
+    setNewRecipeIngredients('')
+    setNewRecipeInstructions('')
+    setNewRecipeNotes('')
+    setIsRecipeFormOpen(false)
+    announceAction(`${name} added to recipe book.`)
+  }
+
+  const handleDeleteRecipe = (recipeId: string) => {
+    const target = recipes.find((r) => r.id === recipeId)
+    const targetIndex = recipes.findIndex((r) => r.id === recipeId)
+    if (!target || !window.confirm(`Remove "${target.name}" from the recipe book?`)) return
+    setRecipes((current) => current.filter((r) => r.id !== recipeId))
+    if (selectedRecipeId === recipeId) setSelectedRecipeId(null)
+    announceAction(`${target.name} removed from recipe book.`)
+    queueUndoAction(`${target.name} removed from recipe book.`, () => {
+      setRecipes((current) => {
+        if (current.some((r) => r.id === target.id)) return current
+        const next = [...current]
+        next.splice(Math.min(targetIndex, next.length), 0, target)
+        return next
+      })
+    })
   }
 
   return (
@@ -2230,6 +2357,224 @@ function App() {
               </div>
             </div>
           </section>
+
+            <section id="recipes" className="panel recipes-panel" tabIndex={0}>
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Recipe book</p>
+                  <h3>Kitchen reference</h3>
+                </div>
+                <span className="panel-badge">{recipes.length} recipes</span>
+              </div>
+
+              <div className="recipe-list">
+                <div className="recipe-actions">
+                  <button
+                    className="action-button prep-action-button"
+                    type="button"
+                    onClick={() => setIsRecipeFormOpen((open) => !open)}
+                  >
+                    {isRecipeFormOpen ? 'Cancel Recipe' : 'Add Recipe'}
+                  </button>
+                </div>
+
+                <div className="panel-toolbar" role="group" aria-label="Filter recipes">
+                  <input
+                    className="toolbar-input"
+                    value={recipeSearchQuery}
+                    onChange={(e) => setRecipeSearchQuery(e.target.value)}
+                    placeholder="Search recipes or ingredients"
+                    aria-label="Search recipes"
+                  />
+                  <select
+                    className="toolbar-select"
+                    value={recipeCategoryFilter}
+                    onChange={(e) => setRecipeCategoryFilter(e.target.value as RecipeCategoryFilter)}
+                    aria-label="Filter by category"
+                  >
+                    <option value="All">All categories</option>
+                    {recipeCategories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="toolbar-select"
+                    value={recipeStationFilter}
+                    onChange={(e) => setRecipeStationFilter(e.target.value as PrepStationFilter)}
+                    aria-label="Filter by station"
+                  >
+                    <option value="All">All stations</option>
+                    {stationNames.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {isRecipeFormOpen && (
+                  <form
+                    className="prep-form recipe-form"
+                    onSubmit={(e) => { e.preventDefault(); handleAddRecipe() }}
+                  >
+                    <label>
+                      Recipe name
+                      <input
+                        value={newRecipeName}
+                        onChange={(e) => setNewRecipeName(e.target.value)}
+                        placeholder="e.g. Herb butter"
+                        required
+                      />
+                    </label>
+                    <label>
+                      Station
+                      <select
+                        value={newRecipeStation}
+                        onChange={(e) => setNewRecipeStation(e.target.value as StationName)}
+                      >
+                        {stationNames.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Category
+                      <select
+                        value={newRecipeCategory}
+                        onChange={(e) => setNewRecipeCategory(e.target.value as RecipeCategory)}
+                      >
+                        {recipeCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Yield
+                      <input
+                        value={newRecipeYield}
+                        onChange={(e) => setNewRecipeYield(e.target.value)}
+                        placeholder="e.g. 12 portions"
+                      />
+                    </label>
+                    <label>
+                      Prep time
+                      <input
+                        value={newRecipePrepTime}
+                        onChange={(e) => setNewRecipePrepTime(e.target.value)}
+                        placeholder="e.g. 20 min"
+                      />
+                    </label>
+                    <label className="recipe-form-full">
+                      Ingredients (one per line)
+                      <textarea
+                        className="recipe-textarea"
+                        value={newRecipeIngredients}
+                        onChange={(e) => setNewRecipeIngredients(e.target.value)}
+                        placeholder={"2 cups heavy cream\n4 cloves garlic\n..."}
+                        rows={5}
+                      />
+                    </label>
+                    <label className="recipe-form-full">
+                      Instructions
+                      <textarea
+                        className="recipe-textarea"
+                        value={newRecipeInstructions}
+                        onChange={(e) => setNewRecipeInstructions(e.target.value)}
+                        placeholder="Step-by-step method..."
+                        rows={5}
+                      />
+                    </label>
+                    <label className="recipe-form-full">
+                      Notes
+                      <textarea
+                        className="recipe-textarea"
+                        value={newRecipeNotes}
+                        onChange={(e) => setNewRecipeNotes(e.target.value)}
+                        placeholder="Allergy info, substitutions, plating notes..."
+                        rows={3}
+                      />
+                    </label>
+                    <button className="action-button prep-submit" type="submit">
+                      Save Recipe
+                    </button>
+                  </form>
+                )}
+
+                {recipes.length === 0 ? (
+                  <div className="empty-state">
+                    <p className="prep-empty">No recipes yet. Add one to build your kitchen reference book.</p>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => setIsRecipeFormOpen(true)}
+                    >
+                      Add first recipe
+                    </button>
+                  </div>
+                ) : filteredRecipes.length === 0 ? (
+                  <p className="prep-empty">No recipes match your search or filters.</p>
+                ) : (
+                  <div className="recipe-grid">
+                    {filteredRecipes.map((recipe) => {
+                      const isOpen = selectedRecipeId === recipe.id
+                      return (
+                        <article className={`recipe-card${isOpen ? ' recipe-card--open' : ''}`} key={recipe.id}>
+                          <button
+                            className="recipe-card-toggle"
+                            type="button"
+                            aria-expanded={isOpen}
+                            onClick={() => setSelectedRecipeId(isOpen ? null : recipe.id)}
+                          >
+                            <div className="recipe-card-main">
+                              <h4>{recipe.name}</h4>
+                              <p>
+                                {recipe.station}
+                                {recipe.prepTime ? ` · ${recipe.prepTime}` : ''}
+                                {recipe.recipeYield ? ` · ${recipe.recipeYield}` : ''}
+                              </p>
+                            </div>
+                            <div className="recipe-card-meta">
+                              <span className="recipe-category-chip">{recipe.category}</span>
+                              <span className="recipe-chevron" aria-hidden="true">{isOpen ? '▴' : '▾'}</span>
+                            </div>
+                          </button>
+
+                          {isOpen && (
+                            <div className="recipe-detail">
+                              {recipe.ingredients && (
+                                <div className="recipe-section">
+                                  <p className="eyebrow">Ingredients</p>
+                                  <ul className="recipe-ingredients">
+                                    {recipe.ingredients.split('\n').filter(Boolean).map((line, i) => (
+                                      <li key={i}>{line}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {recipe.instructions && (
+                                <div className="recipe-section">
+                                  <p className="eyebrow">Instructions</p>
+                                  <p className="recipe-body">{recipe.instructions}</p>
+                                </div>
+                              )}
+                              {recipe.notes && (
+                                <div className="recipe-section">
+                                  <p className="eyebrow">Notes</p>
+                                  <p className="recipe-body">{recipe.notes}</p>
+                                </div>
+                              )}
+                              <div className="recipe-detail-actions">
+                                <button
+                                  className="secondary-button danger-button"
+                                  type="button"
+                                  onClick={() => handleDeleteRecipe(recipe.id)}
+                                >
+                                  Remove Recipe
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
           </section>
       </main>
 
