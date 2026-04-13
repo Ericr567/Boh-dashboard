@@ -1114,3 +1114,293 @@
     font-size: 0.8rem;
   }
 }
+
+/* ─── Service Countdown ──────────────────────────── */
+.service-countdown {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(73, 221, 187, 0.07), rgba(78, 109, 242, 0.07));
+  border: 1px solid rgba(73, 221, 187, 0.2);
+  border-radius: 20px;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  padding: 1rem 1.4rem;
+}
+
+.service-countdown.countdown--warning {
+  background: rgba(246, 184, 80, 0.08);
+  border-color: rgba(246, 184, 80, 0.3);
+}
+
+.service-countdown.countdown--urgent {
+  background: rgba(255, 100, 80, 0.08);
+  border-color: rgba(255, 100, 80, 0.35);
+}
+
+.service-countdown.countdown--past {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(130, 148, 185, 0.15);
+}
+
+.countdown-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.countdown-time-button {
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: #f8fbff;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.countdown-time-button:focus-visible {
+  outline: 3px solid rgba(73, 221, 187, 0.85);
+  outline-offset: 3px;
+}
+
+.countdown-edit-hint {
+  color: #91a4c7;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.countdown-edit-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.countdown-time-input {
+  background: rgba(8, 17, 31, 0.75);
+  border: 1px solid rgba(130, 148, 185, 0.25);
+  border-radius: 10px;
+  color: #f8fbff;
+  font: inherit;
+  padding: 0.35rem 0.55rem;
+}
+
+.countdown-display {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  text-align: right;
+}
+
+.countdown-value {
+  color: #f8fbff;
+  font-size: clamp(1.6rem, 4vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.countdown-past-text {
+  font-size: clamp(1rem, 3vw, 1.4rem);
+}
+
+.countdown--warning .countdown-value {
+  color: #ffd37c;
+}
+
+.countdown--urgent .countdown-value {
+  color: #ff9f90;
+}
+
+.countdown-sublabel {
+  color: #91a4c7;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ─── Station Progress Bar ───────────────────────── */
+.station-progress-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  height: 4px;
+  margin-top: 0.7rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.station-progress-fill {
+  background: linear-gradient(90deg, #49ddbb, #4e6df2);
+  border-radius: 999px;
+  height: 100%;
+  transition: width 500ms ease;
+}
+
+/* ─── Fire It Button ─────────────────────────────── */
+.prep-card-fire {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.fire-button {
+  background: rgba(246, 184, 80, 0.1);
+  border: 1px solid rgba(246, 184, 80, 0.32);
+  border-radius: 999px;
+  color: #ffd37c;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.4rem 0.95rem;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.fire-button:hover {
+  background: rgba(246, 184, 80, 0.2);
+  border-color: rgba(246, 184, 80, 0.55);
+}
+
+.fire-button:focus-visible {
+  outline: 3px solid rgba(246, 184, 80, 0.7);
+  outline-offset: 3px;
+}
+
+/* ─── Print Styles ───────────────────────────────── */
+@media print {
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .app-shell {
+    display: block;
+    padding: 0;
+  }
+
+  .sidebar,
+  .bottom-tab-bar,
+  .fab-container,
+  .hamburger-button,
+  .sidebar-overlay,
+  .prep-actions,
+  .inventory-actions,
+  .eighty-six-actions,
+  .panel-toolbar,
+  .eighty-six-item-actions,
+  .inventory-item-actions,
+  .inventory-controls,
+  .activity-toolbar,
+  .activity-filters,
+  .undo-toast,
+  .onboarding-card,
+  .offline-banner,
+  .service-countdown,
+  .prep-card-fire,
+  .prep-select-label,
+  .station-button,
+  .topbar > div:last-child {
+    display: none !important;
+  }
+
+  .dashboard {
+    display: block;
+    padding: 0;
+  }
+
+  .topbar {
+    margin-bottom: 1rem;
+  }
+
+  .topbar h2 {
+    color: #000 !important;
+    font-size: 1.3rem;
+  }
+
+  .eyebrow,
+  .brand-kicker,
+  .metric-label,
+  .panel-badge,
+  .countdown-label,
+  .countdown-sublabel {
+    color: #555 !important;
+  }
+
+  .snapshot-grid {
+    display: grid;
+    gap: 0.4rem;
+    grid-template-columns: repeat(4, 1fr);
+    margin-bottom: 1rem;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panel,
+  .metric-card,
+  .prep-card,
+  .eighty-six-item,
+  .note-card,
+  .activity-item,
+  .station-card {
+    background: none !important;
+    border: 1px solid #ccc !important;
+    border-radius: 4px !important;
+    break-inside: avoid;
+    color: #000 !important;
+    page-break-inside: avoid;
+  }
+
+  .metric-card strong,
+  .prep-card h4,
+  .prep-card p,
+  .note-card p,
+  .panel h3,
+  .panel p,
+  .eighty-six-item p {
+    color: #000 !important;
+  }
+
+  .prep-card--urgent {
+    border-color: #c00 !important;
+  }
+
+  .urgency-badge,
+  .status-chip,
+  .priority-chip,
+  .load-pill {
+    border: 1px solid #aaa !important;
+    color: #333 !important;
+  }
+
+  .station-progress-track {
+    background: #e0e0e0 !important;
+  }
+
+  .station-progress-fill {
+    background: #555 !important;
+  }
+
+  .inventory-item {
+    border-bottom: 1px solid #ddd !important;
+  }
+}
+

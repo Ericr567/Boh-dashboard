@@ -83,6 +83,7 @@ const storageKeys = {
   eightySixItems: 'lineflow.eightySixItems',
   shiftNotes: 'lineflow.shiftNotes',
   auditEntries: 'lineflow.auditEntries',
+  serviceTime: 'lineflow.serviceTime',
 } as const
 
 let fallbackIdCounter = 0
@@ -416,6 +417,16 @@ function App() {
   const [selectedPrepIds, setSelectedPrepIds] = useState<Set<string>>(new Set())
   const [newPrepQuantity, setNewPrepQuantity] = useState('')
   const [newPrepAssignee, setNewPrepAssignee] = useState<StationName | ''>('')
+  const [serviceTime, setServiceTime] = useState<string>(() => {
+    if (typeof window === 'undefined') return '17:30'
+    try {
+      return window.localStorage.getItem('lineflow.serviceTime') ?? '17:30'
+    } catch {
+      return '17:30'
+    }
+  })
+  const [isEditingServiceTime, setIsEditingServiceTime] = useState(false)
+  const [serviceTimeDraft, setServiceTimeDraft] = useState('')
   const undoTimeoutRef = useRef<number | null>(null)
   const importFileRef = useRef<HTMLInputElement | null>(null)
 
@@ -548,6 +559,20 @@ function App() {
   }
   const shiftLabel = getShiftLabel(now.getHours())
   const isPreServiceUrgent = now.getHours() >= 16
+  const countdown = (() => {
+    const parts = serviceTime.split(':')
+    const h = parseInt(parts[0] ?? '', 10)
+    const m = parseInt(parts[1] ?? '', 10)
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+    const service = new Date(now)
+    service.setHours(h, m, 0, 0)
+    const diffMs = service.getTime() - now.getTime()
+    if (diffMs <= 0) return null
+    const totalMinutes = Math.floor(diffMs / 60_000)
+    const hrs = Math.floor(totalMinutes / 60)
+    const mins = totalMinutes % 60
+    return { totalMinutes, hrs, mins }
+  })()
   const filteredAuditEntries = auditEntries.filter(
     (entry) => auditFilter === 'All' || entry.category === auditFilter,
   )
@@ -800,6 +825,12 @@ function App() {
   }, [auditEntries])
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(storageKeys.serviceTime, serviceTime)
+    }
+  }, [serviceTime])
+
+  useEffect(() => {
     return () => {
       if (undoTimeoutRef.current !== null) {
         window.clearTimeout(undoTimeoutRef.current)
@@ -807,9 +838,9 @@ function App() {
     }
   }, [])
 
-  // Auto-refresh shift label every minute
+  // Auto-refresh clock every 10 seconds for accurate countdown
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(new Date()), 60_000)
+    const interval = window.setInterval(() => setNow(new Date()), 10_000)
     return () => window.clearInterval(interval)
   }, [])
 
@@ -1082,6 +1113,8 @@ function App() {
       addAuditEntry('Prep', `${targetItem.name} marked ready on ${targetItem.station}.`)
 
       announceAction(`${targetItem.name} marked ready.`)
+    } else if (status === 'In Progress' && targetItem.status === 'Not Started') {
+      announceAction(`${targetItem.name} fired on ${targetItem.station}.`)
     }
   }
 
@@ -1162,6 +1195,14 @@ function App() {
       setAuditEntries(previousEntries)
       setAuditFilter(previousFilter)
     })
+  }
+
+  const handleSaveServiceTime = () => {
+    const trimmed = serviceTimeDraft.trim()
+    if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+      setServiceTime(trimmed)
+    }
+    setIsEditingServiceTime(false)
   }
 
   return (
@@ -1330,6 +1371,60 @@ function App() {
             </button>
           </div>
         )}
+
+        <div
+          className={`service-countdown${
+            countdown === null
+              ? ' countdown--past'
+              : countdown.totalMinutes < 30
+                ? ' countdown--urgent'
+                : countdown.totalMinutes < 60
+                  ? ' countdown--warning'
+                  : ''
+          }`}
+        >
+          <div className="countdown-left">
+            <p className="eyebrow">Service countdown</p>
+            {isEditingServiceTime ? (
+              <form
+                className="countdown-edit-form"
+                onSubmit={(event) => { event.preventDefault(); handleSaveServiceTime() }}
+              >
+                <input
+                  className="countdown-time-input"
+                  type="time"
+                  value={serviceTimeDraft}
+                  onChange={(event) => setServiceTimeDraft(event.target.value)}
+                  autoFocus
+                />
+                <button className="secondary-button" type="submit">Set</button>
+                <button className="secondary-button" type="button" onClick={() => setIsEditingServiceTime(false)}>Cancel</button>
+              </form>
+            ) : (
+              <button
+                className="countdown-time-button"
+                type="button"
+                onClick={() => { setServiceTimeDraft(serviceTime); setIsEditingServiceTime(true) }}
+                aria-label={`Service time: ${serviceTime}. Click to edit.`}
+              >
+                {serviceTime}
+                <span className="countdown-edit-hint">edit</span>
+              </button>
+            )}
+          </div>
+          <div className="countdown-display">
+            {countdown === null ? (
+              <span className="countdown-value countdown-past-text">Service underway</span>
+            ) : (
+              <>
+                <span className="countdown-value">
+                  {countdown.hrs > 0 ? `${countdown.hrs}h ${countdown.mins}m` : `${countdown.mins}m`}
+                </span>
+                <span className="countdown-sublabel">remaining</span>
+              </>
+            )}
+          </div>
+        </div>
 
           <section id="snapshot" className="snapshot-grid" aria-label="Service snapshot">
           <section
@@ -1539,6 +1634,17 @@ function App() {
                       <span>Due {item.dueTime}</span>
                       {item.quantity && <span>{item.quantity}</span>}
                     </div>
+                    {item.status === 'Not Started' && (
+                      <div className="prep-card-fire">
+                        <button
+                          className="fire-button"
+                          type="button"
+                          onClick={() => updatePrepItemStatus(item.id, 'In Progress')}
+                        >
+                          Fire it →
+                        </button>
+                      </div>
+                    )}
                   </article>
                   )
                 })
@@ -1957,6 +2063,15 @@ function App() {
                   <p>{station.topPriority ? `${station.topPriority} priority focus` : 'No open prep items'}</p>
                   <p>{station.activeTasks} active tasks</p>
                   <p>{station.readyItems} ready items</p>
+                  {(() => {
+                    const total = station.activeTasks + station.readyItems
+                    const pct = total > 0 ? Math.round((station.readyItems / total) * 100) : 0
+                    return total > 0 ? (
+                      <div className="station-progress-track" aria-label={`${pct}% complete`}>
+                        <div className="station-progress-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                    ) : null
+                  })()}
                 </button>
               ))}
             </div>
