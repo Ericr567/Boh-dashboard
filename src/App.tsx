@@ -1280,6 +1280,21 @@ function App() {
             </p>
           )}
         </div>
+
+        <div className="sidebar-legal">
+          <p className="sidebar-note">
+            Your data stays in this browser — nothing is sent to a server.
+          </p>
+          <div className="sidebar-legal-links">
+            <a href="https://github.com/Ericr567/Boh-dashboard/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">
+              Privacy
+            </a>
+            <span aria-hidden="true">·</span>
+            <a href="https://github.com/Ericr567/Boh-dashboard/blob/main/TERMS.md" target="_blank" rel="noopener noreferrer">
+              Terms
+            </a>
+          </div>
+        </div>
       </aside>
 
       <main id="main-content" className="dashboard">

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0f1423"/>
+  <rect x="36" y="36" width="440" height="440" rx="88" fill="url(#bg)"/>
+  <!-- Flame / flow mark -->
+  <path d="M256 96 C256 96 180 170 175 240 C170 295 210 325 240 308 C228 340 196 360 196 360 C196 360 304 380 336 300 C356 250 316 210 316 210 C316 210 340 228 340 260 C360 220 340 160 300 130 C310 155 295 175 275 180 C285 150 275 116 256 96 Z" fill="url(#flame)"/>
+  <!-- Horizontal lines suggesting a ticket/board -->
+  <rect x="148" y="390" width="100" height="10" rx="5" fill="#49ddbb" opacity="0.55"/>
+  <rect x="264" y="390" width="60" height="10" rx="5" fill="#4e6df2" opacity="0.55"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1a2238"/>
+      <stop offset="100%" stop-color="#0f1423"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="256" y1="96" x2="256" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#49ddbb"/>
+      <stop offset="60%" stop-color="#4e6df2"/>
+      <stop offset="100%" stop-color="#7e4ef2"/>
+    </linearGradient>
+  </defs>
+</svg>

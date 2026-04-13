@@ -144,6 +144,42 @@
   margin-top: 0.8rem;
 }
 
+.sidebar-legal {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(130, 148, 185, 0.12);
+}
+
+.sidebar-legal .sidebar-note {
+  color: #91a4c7;
+  font-size: 0.75rem;
+  margin-top: 0;
+}
+
+.sidebar-legal-links {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.sidebar-legal-links a {
+  color: #91a4c7;
+  font-size: 0.75rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 160ms ease;
+}
+
+.sidebar-legal-links a:hover {
+  color: #c8d4eb;
+}
+
+.sidebar-legal-links span {
+  color: #91a4c7;
+  font-size: 0.75rem;
+}
+
 .sidebar-actions {
   display: flex;
   flex-wrap: wrap;
