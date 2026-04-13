@@ -912,43 +912,43 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.prepItems, JSON.stringify(prepItems))
     }
-  }, [prepItems])
+  }, [prepItems, storageKeys.prepItems])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.inventoryItems, JSON.stringify(inventoryItems))
     }
-  }, [inventoryItems])
+  }, [inventoryItems, storageKeys.inventoryItems])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.eightySixItems, JSON.stringify(eightySixItems))
     }
-  }, [eightySixItems])
+  }, [eightySixItems, storageKeys.eightySixItems])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.shiftNotes, JSON.stringify(shiftNotes))
     }
-  }, [shiftNotes])
+  }, [shiftNotes, storageKeys.shiftNotes])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.auditEntries, JSON.stringify(auditEntries))
     }
-  }, [auditEntries])
+  }, [auditEntries, storageKeys.auditEntries])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.serviceTime, serviceTime)
     }
-  }, [serviceTime])
+  }, [serviceTime, storageKeys.serviceTime])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.recipes, JSON.stringify(recipes))
     }
-  }, [recipes])
+  }, [recipes, storageKeys.recipes])
 
   useEffect(() => {
     return () => {
@@ -2866,7 +2866,16 @@ function App() {
                 onChange={(e) => { setNewKitchenName(e.target.value); setKitchenFormError('') }}
                 placeholder="e.g. Main Kitchen, Pastry Station"
                 aria-label="Kitchen name"
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); legacyDataExists ? handleMigrateAndCreate() : handleCreateKitchen() } }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (legacyDataExists) {
+                      handleMigrateAndCreate()
+                    } else {
+                      handleCreateKitchen()
+                    }
+                  }
+                }}
               />
               <button
                 className="action-button"
