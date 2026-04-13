@@ -1162,6 +1162,152 @@
   padding-top: 0.25rem;
 }
 
+/* ─── Kitchen Selector ───────────────────────────── */
+.kitchen-selector {
+  align-items: center;
+  background: linear-gradient(160deg, #0a0f1e, #0f1423 60%, #0d1a2e);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.kitchen-selector-inner {
+  background: linear-gradient(180deg, rgba(26, 34, 56, 0.94), rgba(15, 20, 35, 0.98));
+  border: 1px solid rgba(112, 140, 185, 0.16);
+  border-radius: 28px;
+  box-shadow: 0 24px 60px rgba(4, 7, 17, 0.45);
+  display: grid;
+  gap: 1.5rem;
+  max-width: 540px;
+  padding: 2rem;
+  width: 100%;
+}
+
+.kitchen-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.kitchen-list-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.kitchen-list-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(130, 148, 185, 0.18);
+  border-radius: 14px;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.2rem;
+  justify-content: center;
+  min-height: 60px;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.kitchen-list-item:hover,
+.kitchen-list-item:focus-visible {
+  background: rgba(73, 221, 187, 0.08);
+  border-color: rgba(73, 221, 187, 0.3);
+  outline: none;
+}
+
+.kitchen-list-item--active {
+  border-color: rgba(73, 221, 187, 0.4);
+  box-shadow: 0 0 0 1px rgba(73, 221, 187, 0.2);
+}
+
+.kitchen-list-name {
+  color: #f8fbff;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.kitchen-list-date {
+  color: #91a4c7;
+  font-size: 0.78rem;
+}
+
+.kitchen-delete-button {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  padding: 0.45rem 0.75rem;
+}
+
+.kitchen-create-form {
+  border-top: 1px solid rgba(130, 148, 185, 0.12);
+  padding-top: 1rem;
+}
+
+.kitchen-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.kitchen-name-input {
+  flex: 1 1 200px;
+}
+
+.kitchen-migrate-note {
+  color: #91a4c7;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+/* ─── Kitchen badge in sidebar ───────────────────── */
+.kitchen-badge {
+  align-items: center;
+  background: rgba(73, 221, 187, 0.07);
+  border: 1px solid rgba(73, 221, 187, 0.18);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  margin: 0.35rem 0 0.65rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.kitchen-badge-name {
+  color: #d9f8ef;
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kitchen-switch-button {
+  background: transparent;
+  border: 1px solid rgba(73, 221, 187, 0.3);
+  border-radius: 999px;
+  color: #77f2d2;
+  cursor: pointer;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.65rem;
+  transition: background 160ms ease;
+}
+
+.kitchen-switch-button:hover {
+  background: rgba(73, 221, 187, 0.12);
+}
+
+.kitchen-switch-button:focus-visible {
+  outline: 3px solid rgba(73, 221, 187, 0.85);
+  outline-offset: 3px;
+}
+
 /* ─── Print styles ───────────────────────────────── */
 @media (max-width: 720px) {
   .app-shell {

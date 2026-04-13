@@ -71,6 +71,12 @@ type UndoState = {
   onUndo: () => void
 }
 
+type KitchenProfile = {
+  id: string
+  name: string
+  createdAt: string
+}
+
 type BackupPayload = {
   version: 1
   exportedAt: string
@@ -96,7 +102,25 @@ const legacySeededEightySixIds = new Set(['eighty-six-1', 'eighty-six-2', 'eight
 const legacySeededShiftNoteIds = new Set(['note-1', 'note-2', 'note-3'])
 const legacySeededAuditIds = new Set(['audit-1', 'audit-2'])
 
-const storageKeys = {
+// Kitchen meta keys — not namespaced, shared across all kitchens
+const kitchenMetaKeys = {
+  kitchens: 'lineflow.kitchens',
+  activeKitchenId: 'lineflow.activeKitchenId',
+} as const
+
+// Data keys namespaced per kitchen
+const makeStorageKeys = (kitchenId: string) => ({
+  prepItems: `lineflow.kitchen.${kitchenId}.prepItems`,
+  inventoryItems: `lineflow.kitchen.${kitchenId}.inventoryItems`,
+  eightySixItems: `lineflow.kitchen.${kitchenId}.eightySixItems`,
+  shiftNotes: `lineflow.kitchen.${kitchenId}.shiftNotes`,
+  auditEntries: `lineflow.kitchen.${kitchenId}.auditEntries`,
+  serviceTime: `lineflow.kitchen.${kitchenId}.serviceTime`,
+  recipes: `lineflow.kitchen.${kitchenId}.recipes`,
+} as const)
+
+// Legacy (pre-profile) keys — used for one-time migration
+const legacyKeys = {
   prepItems: 'lineflow.prepItems',
   inventoryItems: 'lineflow.inventoryItems',
   eightySixItems: 'lineflow.eightySixItems',
@@ -105,6 +129,17 @@ const storageKeys = {
   serviceTime: 'lineflow.serviceTime',
   recipes: 'lineflow.recipes',
 } as const
+
+const migrateToKitchen = (kitchenId: string) => {
+  const keys = makeStorageKeys(kitchenId)
+  const legacyEntries = Object.entries(legacyKeys) as [keyof typeof legacyKeys, string][]
+  for (const [field, legacyKey] of legacyEntries) {
+    const existing = window.localStorage.getItem(legacyKey)
+    if (existing !== null && window.localStorage.getItem(keys[field]) === null) {
+      window.localStorage.setItem(keys[field], existing)
+    }
+  }
+}
 
 let fallbackIdCounter = 0
 
@@ -409,7 +444,14 @@ const getInventoryStatus = (
 const getStationDomId = (stationName: StationName) =>
   `station-toggle-${stationName.toLowerCase().replace(/\s+/g, '-')}`
 
-function App() {
+function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
+  kitchenId: string
+  kitchens: KitchenProfile[]
+  onManageKitchens: () => void
+}) {
+  const storageKeys = makeStorageKeys(kitchenId)
+  const activeKitchen = kitchens.find((k) => k.id === kitchenId)
+
   const [prepItems, setPrepItems] = useState<PrepItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
     loadStoredState(storageKeys.inventoryItems, initialInventoryItems, loadStoredInventoryItems),
@@ -464,7 +506,7 @@ function App() {
   const [serviceTime, setServiceTime] = useState<string>(() => {
     if (typeof window === 'undefined') return '17:30'
     try {
-      return window.localStorage.getItem('lineflow.serviceTime') ?? '17:30'
+      return window.localStorage.getItem(makeStorageKeys(kitchenId).serviceTime) ?? '17:30'
     } catch {
       return '17:30'
     }
@@ -1361,6 +1403,16 @@ function App() {
             </button>
           </div>
           <h1 className="brand-title">LineFlow</h1>
+          <div className="kitchen-badge">
+            <span className="kitchen-badge-name">{activeKitchen?.name ?? 'My Kitchen'}</span>
+            <button
+              className="kitchen-switch-button"
+              type="button"
+              onClick={() => { setIsSidebarOpen(false); onManageKitchens() }}
+            >
+              Switch
+            </button>
+          </div>
           <p className="brand-copy">
             A live dashboard for prep visibility, low-stock awareness, and shift handoff.
           </p>
@@ -2648,6 +2700,207 @@ function App() {
         </button>
       </div>
     </div>
+  )
+}
+
+// ─── Kitchen management helpers ───────────────────
+
+const loadKitchens = (): KitchenProfile[] => {
+  try {
+    const raw = window.localStorage.getItem(kitchenMetaKeys.kitchens)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((k): k is KitchenProfile =>
+      k && typeof k.id === 'string' && typeof k.name === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+const saveKitchens = (kitchens: KitchenProfile[]) => {
+  window.localStorage.setItem(kitchenMetaKeys.kitchens, JSON.stringify(kitchens))
+}
+
+const hasLegacyData = () => {
+  try {
+    return (
+      window.localStorage.getItem('lineflow.prepItems') !== null ||
+      window.localStorage.getItem('lineflow.inventoryItems') !== null
+    )
+  } catch {
+    return false
+  }
+}
+
+// ─── Root App — kitchen selector ─────────────────
+
+function App() {
+  const [kitchens, setKitchens] = useState<KitchenProfile[]>(() => loadKitchens())
+  const [activeKitchenId, setActiveKitchenId] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(kitchenMetaKeys.activeKitchenId)
+    } catch {
+      return null
+    }
+  })
+  const [showSelector, setShowSelector] = useState(() => {
+    const savedId = (() => {
+      try { return window.localStorage.getItem(kitchenMetaKeys.activeKitchenId) } catch { return null }
+    })()
+    const kitchenList = loadKitchens()
+    return !savedId || !kitchenList.some((k) => k.id === savedId)
+  })
+  const [newKitchenName, setNewKitchenName] = useState('')
+  const [kitchenFormError, setKitchenFormError] = useState('')
+
+  const selectKitchen = (kitchenId: string) => {
+    setActiveKitchenId(kitchenId)
+    window.localStorage.setItem(kitchenMetaKeys.activeKitchenId, kitchenId)
+    setShowSelector(false)
+  }
+
+  const handleCreateKitchen = () => {
+    const name = newKitchenName.trim()
+    if (!name) {
+      setKitchenFormError('Enter a name for this kitchen.')
+      return
+    }
+    if (kitchens.some((k) => k.name.toLowerCase() === name.toLowerCase())) {
+      setKitchenFormError('A kitchen with that name already exists.')
+      return
+    }
+    const newKitchen: KitchenProfile = {
+      id: createRuntimeId('kitchen'),
+      name,
+      createdAt: new Date().toISOString(),
+    }
+    const updated = [...kitchens, newKitchen]
+    setKitchens(updated)
+    saveKitchens(updated)
+    setNewKitchenName('')
+    setKitchenFormError('')
+    selectKitchen(newKitchen.id)
+  }
+
+  const handleDeleteKitchen = (kitchenId: string) => {
+    const target = kitchens.find((k) => k.id === kitchenId)
+    if (!target || !window.confirm(`Delete "${target.name}" and all its data? This cannot be undone.`)) return
+    // Clear all namespaced keys for this kitchen
+    const keys = makeStorageKeys(kitchenId)
+    Object.values(keys).forEach((k) => window.localStorage.removeItem(k))
+    const updated = kitchens.filter((k) => k.id !== kitchenId)
+    setKitchens(updated)
+    saveKitchens(updated)
+    if (activeKitchenId === kitchenId) {
+      setActiveKitchenId(null)
+      window.localStorage.removeItem(kitchenMetaKeys.activeKitchenId)
+    }
+  }
+
+  // One-time migration: if legacy data exists and a new kitchen is being created, offer to migrate
+  const handleMigrateAndCreate = () => {
+    const name = newKitchenName.trim()
+    if (!name) { setKitchenFormError('Enter a name for this kitchen.'); return }
+    const newKitchen: KitchenProfile = {
+      id: createRuntimeId('kitchen'),
+      name,
+      createdAt: new Date().toISOString(),
+    }
+    const updated = [...kitchens, newKitchen]
+    setKitchens(updated)
+    saveKitchens(updated)
+    migrateToKitchen(newKitchen.id)
+    setNewKitchenName('')
+    setKitchenFormError('')
+    selectKitchen(newKitchen.id)
+  }
+
+  const legacyDataExists = kitchens.length === 0 && hasLegacyData()
+
+  if (showSelector) {
+    return (
+      <div className="kitchen-selector">
+        <div className="kitchen-selector-inner">
+          <p className="brand-kicker">BOH operations</p>
+          <h1 className="brand-title">LineFlow</h1>
+          <p className="brand-copy">Choose a kitchen to load its data, or create a new one.</p>
+
+          {kitchens.length > 0 && (
+            <section className="kitchen-list" aria-label="Your kitchens">
+              <p className="eyebrow" style={{ marginBottom: '0.65rem' }}>Your kitchens</p>
+              {kitchens.map((kitchen) => (
+                <div className="kitchen-list-row" key={kitchen.id}>
+                  <button
+                    className={`kitchen-list-item${activeKitchenId === kitchen.id ? ' kitchen-list-item--active' : ''}`}
+                    type="button"
+                    onClick={() => selectKitchen(kitchen.id)}
+                  >
+                    <span className="kitchen-list-name">{kitchen.name}</span>
+                    <span className="kitchen-list-date">
+                      Created {new Date(kitchen.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </button>
+                  <button
+                    className="secondary-button danger-button kitchen-delete-button"
+                    type="button"
+                    onClick={() => handleDeleteKitchen(kitchen.id)}
+                    aria-label={`Delete ${kitchen.name}`}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </section>
+          )}
+
+          <section className="kitchen-create-form" aria-label="Create new kitchen">
+            <p className="eyebrow" style={{ marginBottom: '0.65rem' }}>
+              {kitchens.length === 0 ? 'Create your first kitchen' : 'Add another kitchen'}
+            </p>
+            <div className="kitchen-form-row">
+              <input
+                className="toolbar-input kitchen-name-input"
+                value={newKitchenName}
+                onChange={(e) => { setNewKitchenName(e.target.value); setKitchenFormError('') }}
+                placeholder="e.g. Main Kitchen, Pastry Station"
+                aria-label="Kitchen name"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); legacyDataExists ? handleMigrateAndCreate() : handleCreateKitchen() } }}
+              />
+              <button
+                className="action-button"
+                type="button"
+                onClick={legacyDataExists ? handleMigrateAndCreate : handleCreateKitchen}
+              >
+                {legacyDataExists ? 'Create & Import Existing Data' : 'Create Kitchen'}
+              </button>
+            </div>
+            {legacyDataExists && kitchens.length === 0 && (
+              <p className="kitchen-migrate-note">
+                Existing data detected — it will be imported into the new kitchen automatically.
+              </p>
+            )}
+            {kitchenFormError && (
+              <p className="form-error" role="alert" style={{ marginTop: '0.5rem' }}>
+                {kitchenFormError}
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+    )
+  }
+
+  if (!activeKitchenId) return null
+
+  return (
+    <Dashboard
+      key={activeKitchenId}
+      kitchenId={activeKitchenId}
+      kitchens={kitchens}
+      onManageKitchens={() => setShowSelector(true)}
+    />
   )
 }
 
