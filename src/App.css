@@ -213,6 +213,34 @@
   gap: 0.9rem;
 }
 
+.toggle-group {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(130, 148, 185, 0.18);
+  border-radius: 999px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.25rem;
+}
+
+.toggle-chip {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #c8d4eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.45rem 0.8rem;
+}
+
+.toggle-chip.is-active {
+  background: linear-gradient(135deg, rgba(73, 221, 187, 0.18), rgba(78, 109, 242, 0.18));
+  color: #f8fbff;
+}
+
 .handoff-message {
   background: rgba(73, 221, 187, 0.1);
   border: 1px solid rgba(73, 221, 187, 0.25);
@@ -220,6 +248,73 @@
   color: #d9f8ef;
   margin: 0;
   padding: 0.85rem 1rem;
+}
+
+.dashboard-role-banner {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(78, 109, 242, 0.12), rgba(73, 221, 187, 0.1));
+  border: 1px solid rgba(112, 140, 185, 0.18);
+  border-radius: 24px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+}
+
+.dashboard-role-banner--manager {
+  background: linear-gradient(135deg, rgba(78, 109, 242, 0.16), rgba(73, 221, 187, 0.08));
+}
+
+.dashboard-role-banner--staff {
+  background: linear-gradient(135deg, rgba(73, 221, 187, 0.12), rgba(246, 184, 80, 0.08));
+}
+
+.dashboard-role-banner h3 {
+  color: #f8fbff;
+  margin: 0.25rem 0;
+}
+
+.dashboard-role-banner p {
+  color: #c8d4eb;
+  margin: 0;
+}
+
+.dashboard--staff .dashboard-role-banner {
+  border-color: rgba(73, 221, 187, 0.24);
+}
+
+.dashboard--staff .metric-card,
+.dashboard--staff .panel {
+  border-color: rgba(73, 221, 187, 0.16);
+}
+
+.dashboard-role-stats {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: min(100%, 360px);
+}
+
+.role-stat {
+  background: rgba(8, 17, 31, 0.32);
+  border: 1px solid rgba(130, 148, 185, 0.16);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem;
+}
+
+.role-stat span {
+  color: #91a4c7;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.role-stat strong {
+  color: #f8fbff;
+  font-size: 1.25rem;
 }
 
 .shift-pill {
@@ -348,6 +443,131 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.manager-grid,
+.staff-focus-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.manager-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.staff-focus-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.analytics-panel,
+.tasks-panel {
+  grid-column: span 2;
+}
+
+.trend-chart {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
+  margin-top: 1rem;
+}
+
+.trend-column {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+}
+
+.trend-column span {
+  color: #91a4c7;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.trend-bar-track {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  display: flex;
+  height: 150px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.trend-bar-fill {
+  background: linear-gradient(180deg, #49ddbb, #4e6df2);
+  border-radius: 999px 999px 0 0;
+  width: 100%;
+}
+
+.labor-breakdown,
+.roster-list,
+.attendance-list,
+.alert-list,
+.task-status-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.mini-metric,
+.schedule-row,
+.attendance-row,
+.alert-row,
+.task-status-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(130, 148, 185, 0.12);
+  border-radius: 16px;
+  padding: 0.85rem 0.95rem;
+}
+
+.mini-metric span,
+.schedule-meta span,
+.task-status-meta p {
+  color: #91a4c7;
+}
+
+.mini-metric strong,
+.schedule-row strong,
+.attendance-row strong,
+.alert-row strong,
+.task-status-meta strong {
+  color: #f8fbff;
+}
+
+.schedule-row,
+.attendance-row,
+.alert-row,
+.task-status-meta {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.schedule-meta {
+  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.task-status-item {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.task-progress {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.task-progress-fill {
+  background: linear-gradient(90deg, #49ddbb, #4e6df2);
+  border-radius: 999px;
+  height: 100%;
+}
+
 .metric-card {
   border-radius: 24px;
   padding: 1.25rem;
@@ -376,6 +596,17 @@
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9fr);
+}
+
+.dashboard-grid--staff {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-grid--staff .prep-panel,
+.dashboard-grid--staff .stations-panel,
+.dashboard-grid--staff .side-panel,
+.dashboard-grid--staff .notes-panel {
+  grid-column: 1;
 }
 
 .carousel-slide {
@@ -634,6 +865,22 @@
 }
 
 .priority-low {
+  background: rgba(117, 141, 183, 0.14);
+  color: #c4d4f2;
+}
+
+.status-clocked-in,
+.status-on-time {
+  background: rgba(73, 221, 187, 0.14);
+  color: #77f2d2;
+}
+
+.status-late {
+  background: rgba(255, 122, 102, 0.14);
+  color: #ff9f90;
+}
+
+.status-off-today {
   background: rgba(117, 141, 183, 0.14);
   color: #c4d4f2;
 }
@@ -905,6 +1152,8 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .manager-grid,
+  .staff-focus-grid,
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1443,6 +1692,104 @@
 }
 
 /* ─── Service Countdown ──────────────────────────── */
+.app-shell--light {
+  background: linear-gradient(180deg, #eef4f8 0%, #e6edf5 100%);
+  color: #1f2a37;
+}
+
+.app-shell--light .sidebar,
+.app-shell--light .panel,
+.app-shell--light .metric-card,
+.app-shell--light .sidebar-card,
+.app-shell--light .service-countdown {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 251, 0.98));
+  border-color: rgba(148, 163, 184, 0.24);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.app-shell--light .brand-title,
+.app-shell--light .topbar h2,
+.app-shell--light .panel h3,
+.app-shell--light .metric-card strong,
+.app-shell--light .sidebar-card strong,
+.app-shell--light .prep-card h4,
+.app-shell--light .inventory-item h4,
+.app-shell--light .station-card h4,
+.app-shell--light .mini-metric strong,
+.app-shell--light .schedule-row strong,
+.app-shell--light .alert-row strong,
+.app-shell--light .task-status-meta strong {
+  color: #0f172a;
+}
+
+.app-shell--light .brand-copy,
+.app-shell--light .panel p,
+.app-shell--light .metric-card p,
+.app-shell--light .sidebar-card p,
+.app-shell--light .prep-card p,
+.app-shell--light .inventory-item p,
+.app-shell--light .station-card p,
+.app-shell--light .note-card p,
+.app-shell--light .mini-metric span,
+.app-shell--light .schedule-meta span,
+.app-shell--light .task-status-meta p,
+.app-shell--light .trend-column span {
+  color: #526072;
+}
+
+.app-shell--light .brand-kicker,
+.app-shell--light .eyebrow,
+.app-shell--light .sidebar-label,
+.app-shell--light .metric-label,
+.app-shell--light .panel-badge,
+.app-shell--light .note-meta span,
+.app-shell--light .shift-pill span {
+  color: #64748b;
+}
+
+.app-shell--light .secondary-button,
+.app-shell--light .toggle-group,
+.app-shell--light .toolbar-input,
+.app-shell--light .toolbar-select,
+.app-shell--light .prep-form input,
+.app-shell--light .prep-form select,
+.app-shell--light .inventory-input,
+.app-shell--light .inventory-stepper,
+.app-shell--light .countdown-time-input,
+.app-shell--light .recipe-textarea {
+  background: #fff;
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #0f172a;
+}
+
+.app-shell--light .toggle-chip {
+  color: #334155;
+}
+
+.app-shell--light .toggle-chip.is-active {
+  color: #0f172a;
+}
+
+@media (max-width: 720px) {
+  .manager-grid,
+  .staff-focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-panel,
+  .tasks-panel {
+    grid-column: auto;
+  }
+
+  .schedule-row,
+  .attendance-row,
+  .alert-row,
+  .task-status-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .service-countdown {
   align-items: center;
   background: linear-gradient(135deg, rgba(73, 221, 187, 0.07), rgba(78, 109, 242, 0.07));

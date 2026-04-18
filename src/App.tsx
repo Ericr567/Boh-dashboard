@@ -444,6 +444,83 @@ const getInventoryStatus = (
 const getStationDomId = (stationName: StationName) =>
   `station-toggle-${stationName.toLowerCase().replace(/\s+/g, '-')}`
 
+type DashboardRange = 'Day' | 'Week' | 'Month'
+type DashboardView = 'Manager' | 'Staff'
+type TeamStatus = 'Clocked In' | 'On Time' | 'Late' | 'Off Today'
+
+type TeamMember = {
+  name: string
+  role: string
+  shift: string
+  status: TeamStatus
+}
+
+const businessMetricsByRange: Record<
+  DashboardRange,
+  {
+    sales: string
+    salesDelta: string
+    laborCost: string
+    laborHours: string
+    overtimeRisk: string
+    forecast: string
+    trendLabels: string[]
+    trendValues: number[]
+  }
+> = {
+  Day: {
+    sales: '$12.4k',
+    salesDelta: '+6.2%',
+    laborCost: '22.8%',
+    laborHours: '94 hrs',
+    overtimeRisk: '1 teammate',
+    forecast: '94%',
+    trendLabels: ['10a', '12p', '2p', '4p', '6p', '8p'],
+    trendValues: [38, 64, 52, 70, 92, 78],
+  },
+  Week: {
+    sales: '$84.7k',
+    salesDelta: '+9.4%',
+    laborCost: '24.1%',
+    laborHours: '612 hrs',
+    overtimeRisk: '2 teammates',
+    forecast: '97%',
+    trendLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    trendValues: [54, 62, 58, 71, 88, 96, 74],
+  },
+  Month: {
+    sales: '$341k',
+    salesDelta: '+12.1%',
+    laborCost: '23.4%',
+    laborHours: '2,448 hrs',
+    overtimeRisk: '3 teammates',
+    forecast: '101%',
+    trendLabels: ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4'],
+    trendValues: [68, 74, 82, 95],
+  },
+}
+
+const teamMembers: TeamMember[] = [
+  { name: 'Chef Ana', role: 'Head Chef', shift: '9:00 AM – 6:00 PM', status: 'Clocked In' },
+  { name: 'Luis', role: 'Sous Chef', shift: '11:00 AM – 8:00 PM', status: 'On Time' },
+  { name: 'Mina', role: 'Expo', shift: '12:00 PM – 9:00 PM', status: 'On Time' },
+  { name: 'Jordan', role: 'Prep Cook', shift: '2:00 PM – 10:00 PM', status: 'Late' },
+  { name: 'Tia', role: 'Pastry', shift: 'Off', status: 'Off Today' },
+]
+
+const fallbackLowStockWarnings = [
+  { name: 'Ribeye', status: 'Critical', detail: '6 portions left' },
+  { name: 'Chicken stock', status: 'Low', detail: '2 quarts left' },
+  { name: 'Butter', status: 'Low', detail: '5 pounds left' },
+]
+
+const fallbackTaskStatus = [
+  { label: 'Line check complete', detail: 'Opening checklist', progress: 100, status: 'Ready' as PrepStatus },
+  { label: 'Sauce par prep', detail: 'Pantry • due 2:00 PM', progress: 82, status: 'In Progress' as PrepStatus },
+  { label: 'Protein pull', detail: 'Grill • due 3:15 PM', progress: 56, status: 'In Progress' as PrepStatus },
+  { label: 'Dessert plating setup', detail: 'Pastry • due 4:00 PM', progress: 22, status: 'Not Started' as PrepStatus },
+]
+
 function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
   kitchenId: string
   kitchens: KitchenProfile[]
@@ -529,6 +606,9 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('')
   const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<RecipeCategoryFilter>('All')
   const [recipeStationFilter, setRecipeStationFilter] = useState<PrepStationFilter>('All')
+  const [dashboardRange, setDashboardRange] = useState<DashboardRange>('Week')
+  const [dashboardView, setDashboardView] = useState<DashboardView>('Staff')
+  const [isDarkMode, setIsDarkMode] = useState(true)
   const undoTimeoutRef = useRef<number | null>(null)
   const importFileRef = useRef<HTMLInputElement | null>(null)
 
@@ -700,6 +780,101 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
     ? getStationDomId(selectedStation)
     : undefined
 
+  const selectedMetrics = businessMetricsByRange[dashboardRange]
+  const positiveAttendanceCount = teamMembers.filter(
+    (member) => member.status === 'Clocked In' || member.status === 'On Time',
+  ).length
+  const lowStockWarnings = inventoryItems.length > 0
+    ? inventoryItems
+        .filter((item) => getInventoryStatus(item.quantity, item.threshold) !== 'OK')
+        .slice(0, 4)
+        .map((item) => ({
+          name: item.name,
+          status: getInventoryStatus(item.quantity, item.threshold),
+          detail: `${item.quantity} ${item.unit} left`,
+        }))
+    : fallbackLowStockWarnings
+  const visibleLowStockCount = inventoryItems.length > 0 ? criticalStockCount : fallbackLowStockWarnings.length
+  const totalTrackedTasks = prepItems.length > 0 ? prepItems.length : 9
+  const completedTrackedTasks = prepItems.length > 0 ? readyPrepCount : 7
+  const completionRate = Math.round((completedTrackedTasks / totalTrackedTasks) * 100)
+  const taskStatusItems = prepItems.length > 0
+    ? prepItems.slice(0, 4).map((item) => ({
+        label: item.name,
+        detail: `${item.station} • due ${item.dueTime}`,
+        progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
+        status: item.status,
+      }))
+    : fallbackTaskStatus
+  const staffOnShiftCount = teamMembers.filter((member) => member.status !== 'Off Today').length
+  const lateAttendanceCount = teamMembers.filter((member) => member.status === 'Late').length
+  const urgentPrepCount = visiblePrepItems.filter((item) => item.priority === 'High').length
+  const dashboardHeroTitle =
+    dashboardView === 'Manager'
+      ? 'Manager dashboard for sales, labor, staffing, and service control'
+      : 'Staff dashboard for prep priorities, coverage, and shift focus'
+  const dashboardHeroSummary =
+    dashboardView === 'Manager'
+      ? `${selectedMetrics.sales} in tracked sales, ${selectedMetrics.laborCost} labor, and ${visibleLowStockCount} stock warning${visibleLowStockCount === 1 ? '' : 's'} need review.`
+      : `${openPrepCount} open prep item${openPrepCount === 1 ? '' : 's'}, ${urgentPrepCount} urgent task${urgentPrepCount === 1 ? '' : 's'}, and ${readyPrepCount} ready-to-fire item${readyPrepCount === 1 ? '' : 's'} for the shift.`
+  const snapshotCards = dashboardView === 'Manager'
+    ? [
+        {
+          label: 'Net sales',
+          value: selectedMetrics.sales,
+          detail: `${selectedMetrics.salesDelta} versus the previous ${dashboardRange.toLowerCase()}.`,
+          className: 'accent-teal',
+        },
+        {
+          label: 'Labor cost',
+          value: selectedMetrics.laborCost,
+          detail: `${selectedMetrics.laborHours} scheduled with ${selectedMetrics.overtimeRisk} at risk.`,
+          className: '',
+        },
+        {
+          label: 'Task completion',
+          value: `${completionRate}%`,
+          detail: `${completedTrackedTasks} of ${totalTrackedTasks} tracked BOH tasks completed.`,
+          className: 'accent-amber',
+        },
+        {
+          label: 'Staff attendance',
+          value: `${positiveAttendanceCount}/${teamMembers.length}`,
+          detail: `${lateAttendanceCount} late and ${staffOnShiftCount} currently on shift.`,
+          className: 'accent-coral',
+        },
+      ]
+    : [
+        {
+          label: 'Open tasks',
+          value: String(openPrepCount),
+          detail: 'Prep items still waiting on the line.',
+          className: 'accent-teal',
+        },
+        {
+          label: 'Urgent prep',
+          value: String(urgentPrepCount),
+          detail: 'High-priority items due before service.',
+          className: 'accent-coral',
+        },
+        {
+          label: 'Ready to fire',
+          value: String(readyPrepCount),
+          detail: 'Completed prep ready for the next push.',
+          className: '',
+        },
+        {
+          label: 'Low stock',
+          value: String(visibleLowStockCount),
+          detail: 'Watch these products during the shift.',
+          className: 'accent-amber',
+        },
+      ]
+  const isManagerView = dashboardView === 'Manager'
+  const visibleSectionIds: SectionId[] = isManagerView
+    ? sectionIds
+    : sectionIds.filter((sectionId) => sectionId !== 'recipes')
+
   const announceAction = (message: string) => {
     setActionAnnouncement('')
     window.setTimeout(() => {
@@ -763,6 +938,37 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
       announceAction('Data exported to backup file.')
     } catch {
       setBackupError('Could not export your data. Please try again.')
+    }
+  }
+
+  const handleExportReport = () => {
+    try {
+      const csvLines = [
+        'Metric,Value',
+        `View,${dashboardView}`,
+        `Range,${dashboardRange}`,
+        `Sales,${selectedMetrics.sales}`,
+        `Sales Delta,${selectedMetrics.salesDelta}`,
+        `Labor Cost,${selectedMetrics.laborCost}`,
+        `Labor Hours,${selectedMetrics.laborHours}`,
+        `Forecast,${selectedMetrics.forecast}`,
+        `Open Prep,${openPrepCount}`,
+        `Ready Prep,${readyPrepCount}`,
+        `Task Completion,${completionRate}%`,
+        `Low Stock Warnings,${visibleLowStockCount}`,
+      ]
+
+      const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `lineflow-report-${dashboardRange.toLowerCase()}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+      announceAction(`${dashboardRange} report exported.`)
+      setBackupError('')
+    } catch {
+      setBackupError('Could not export the report. Please try again.')
     }
   }
 
@@ -999,6 +1205,13 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
+
+  useEffect(() => {
+    if (!isManagerView && activeSection === 'recipes') {
+      setActiveSection('snapshot')
+      window.location.hash = 'snapshot'
+    }
+  }, [activeSection, isManagerView])
 
   const handleGenerateHandoff = () => {
     const pendingPrep = prepItems
@@ -1375,7 +1588,7 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isDarkMode ? '' : ' app-shell--light'}`}>
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
@@ -1414,12 +1627,14 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
             </button>
           </div>
           <p className="brand-copy">
-            A live dashboard for prep visibility, low-stock awareness, and shift handoff.
+            {dashboardView === 'Manager'
+              ? 'Manager workspace for sales, labor, stock visibility, and shift handoff.'
+              : 'Staff workspace for live prep priorities, station coverage, and stock warnings.'}
           </p>
         </div>
 
         <nav className="sidebar-nav" aria-label="Dashboard sections">
-          {sectionIds.map((sectionId) => (
+          {visibleSectionIds.map((sectionId) => (
             <a
               key={sectionId}
               className={activeSection === sectionId ? 'is-active' : undefined}
@@ -1476,7 +1691,7 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
         </div>
       </aside>
 
-      <main id="main-content" className="dashboard">
+      <main id="main-content" className={`dashboard dashboard--${dashboardView.toLowerCase()}`}>
         {!isOnline && (
           <div className="offline-banner" role="status">
             You are offline. The app is still fully functional — data is saved locally.
@@ -1484,8 +1699,12 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
         )}
         <header className="topbar">
           <div>
-            <p className="eyebrow">Back of House Dashboard</p>
-            <h2>Keep service moving without chasing paper notes.</h2>
+            <p className="eyebrow">{dashboardView} Dashboard</p>
+            <h2>
+              {dashboardView === 'Manager'
+                ? 'Run service, labor, sales, and inventory from one place.'
+                : 'Give the team a focused view of tasks, stations, and shift alerts.'}
+            </h2>
           </div>
 
           <div className="topbar-meta">
@@ -1498,18 +1717,87 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
             >
               ☰
             </button>
+
+            <div className="toggle-group" role="tablist" aria-label="Dashboard view">
+              {(['Manager', 'Staff'] as DashboardView[]).map((view) => (
+                <button
+                  key={view}
+                  className={`toggle-chip${dashboardView === view ? ' is-active' : ''}`}
+                  type="button"
+                  onClick={() => setDashboardView(view)}
+                  aria-pressed={dashboardView === view}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+
+            {isManagerView && (
+              <div className="toggle-group" role="group" aria-label="Report range">
+                {(['Day', 'Week', 'Month'] as DashboardRange[]).map((range) => (
+                  <button
+                    key={range}
+                    className={`toggle-chip${dashboardRange === range ? ' is-active' : ''}`}
+                    type="button"
+                    onClick={() => setDashboardRange(range)}
+                    aria-pressed={dashboardRange === range}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="shift-pill">
               <span>{shiftLabel}</span>
               <strong>{dateLabel}</strong>
             </div>
-            <button className="action-button" type="button" onClick={handleGenerateHandoff}>
-              Generate Handoff
+            <button className="secondary-button" type="button" onClick={() => setIsDarkMode((current) => !current)}>
+              {isDarkMode ? 'Light Mode' : 'Dark Mode'}
             </button>
-            <button className="secondary-button" type="button" onClick={() => window.print()}>
-              Print
-            </button>
+            {dashboardView === 'Manager' ? (
+              <>
+                <button className="action-button" type="button" onClick={handleExportReport}>
+                  Export Report
+                </button>
+                <button className="secondary-button" type="button" onClick={handleGenerateHandoff}>
+                  Generate Handoff
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="action-button" type="button" onClick={() => jumpToSection('prep-board')}>
+                  Open Task Board
+                </button>
+                <button className="secondary-button" type="button" onClick={() => jumpToSection('inventory')}>
+                  View Stock Alerts
+                </button>
+              </>
+            )}
           </div>
         </header>
+
+        <section className={`dashboard-role-banner dashboard-role-banner--${dashboardView.toLowerCase()}`} aria-label={`${dashboardView} dashboard summary`}>
+          <div>
+            <p className="eyebrow">Role summary</p>
+            <h3>{dashboardHeroTitle}</h3>
+            <p>{dashboardHeroSummary}</p>
+          </div>
+          <div className="dashboard-role-stats">
+            <div className="role-stat">
+              <span>On shift</span>
+              <strong>{staffOnShiftCount}</strong>
+            </div>
+            <div className="role-stat">
+              <span>Urgent prep</span>
+              <strong>{urgentPrepCount}</strong>
+            </div>
+            <div className="role-stat">
+              <span>Low stock</span>
+              <strong>{visibleLowStockCount}</strong>
+            </div>
+          </div>
+        </section>
 
         {handoffMessage && (
           <p className="handoff-message" role="status" aria-live="polite">
@@ -1621,31 +1909,240 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
         </div>
 
           <section id="snapshot" className="snapshot-grid" aria-label="Service snapshot">
-          <section
-              className="metric-card"
-          >
-              <span className="metric-label">Open prep</span>
-              <strong>{openPrepCount}</strong>
-              <p>Items still in progress before service starts.</p>
-          </section>
-            <section className="metric-card accent-teal">
-              <span className="metric-label">Ready to fire</span>
-              <strong>{readyPrepCount}</strong>
-              <p>Prep items completed and ready for line use.</p>
-            </section>
-            <section className="metric-card accent-amber">
-              <span className="metric-label">Low stock alerts</span>
-              <strong>{criticalStockCount}</strong>
-              <p>Items that need attention before dinner rush.</p>
-            </section>
-            <section className="metric-card accent-coral">
-              <span className="metric-label">Active stations</span>
-              <strong>{activeStations}</strong>
-              <p>Stations currently carrying active tasks.</p>
-            </section>
+            {snapshotCards.map((card) => (
+              <section key={card.label} className={`metric-card${card.className ? ` ${card.className}` : ''}`}>
+                <span className="metric-label">{card.label}</span>
+                <strong>{card.value}</strong>
+                <p>{card.detail}</p>
+              </section>
+            ))}
           </section>
 
-          <section className="dashboard-grid">
+          {dashboardView === 'Manager' ? (
+            <section className="manager-grid" aria-label="Manager dashboard overview">
+              <article className="panel analytics-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Weekly trends</p>
+                    <h3>Sales pace for the selected range</h3>
+                  </div>
+                  <span className="panel-badge">{selectedMetrics.salesDelta}</span>
+                </div>
+                <div className="trend-chart" role="img" aria-label={`${dashboardRange} sales trend chart`}>
+                  {selectedMetrics.trendLabels.map((label, index) => (
+                    <div className="trend-column" key={label}>
+                      <div className="trend-bar-track">
+                        <div
+                          className="trend-bar-fill"
+                          style={{ height: `${selectedMetrics.trendValues[index]}%` }}
+                        />
+                      </div>
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel labor-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Labor tracking</p>
+                    <h3>Cost and hours</h3>
+                  </div>
+                  <span className="panel-badge">Target 25%</span>
+                </div>
+                <div className="labor-breakdown">
+                  <div className="mini-metric">
+                    <span>Labor cost</span>
+                    <strong>{selectedMetrics.laborCost}</strong>
+                  </div>
+                  <div className="mini-metric">
+                    <span>Scheduled hours</span>
+                    <strong>{selectedMetrics.laborHours}</strong>
+                  </div>
+                  <div className="mini-metric">
+                    <span>Overtime risk</span>
+                    <strong>{selectedMetrics.overtimeRisk}</strong>
+                  </div>
+                </div>
+              </article>
+
+              <article className="panel staffing-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Shift schedule</p>
+                    <h3>Today’s coverage</h3>
+                  </div>
+                  <span className="panel-badge">{teamMembers.length} team</span>
+                </div>
+                <div className="roster-list">
+                  {teamMembers.map((member) => (
+                    <div className="schedule-row" key={member.name}>
+                      <div>
+                        <strong>{member.name}</strong>
+                        <p>{member.role}</p>
+                      </div>
+                      <div className="schedule-meta">
+                        <span>{member.shift}</span>
+                        <span className={`status-chip status-${member.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                          {member.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel attendance-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Attendance</p>
+                    <h3>Who is checked in</h3>
+                  </div>
+                  <span className="panel-badge">Live board</span>
+                </div>
+                <div className="attendance-list">
+                  {teamMembers.map((member) => (
+                    <div className="attendance-row" key={`${member.name}-attendance`}>
+                      <span>{member.name}</span>
+                      <span className={`status-chip status-${member.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                        {member.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel tasks-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Task completion</p>
+                    <h3>Prep and checklist status</h3>
+                  </div>
+                  <span className="panel-badge">{completionRate}% done</span>
+                </div>
+                <div className="task-status-list">
+                  {taskStatusItems.map((task) => (
+                    <div className="task-status-item" key={task.label}>
+                      <div className="task-status-meta">
+                        <div>
+                          <strong>{task.label}</strong>
+                          <p>{task.detail}</p>
+                        </div>
+                        <span className={`status-chip status-${task.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                          {task.status}
+                        </span>
+                      </div>
+                      <div className="task-progress">
+                        <div className="task-progress-fill" style={{ width: `${task.progress}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel alerts-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Low-stock warnings</p>
+                    <h3>Items needing attention</h3>
+                  </div>
+                  <span className="panel-badge">Reorder now</span>
+                </div>
+                <div className="alert-list">
+                  {lowStockWarnings.map((warning) => (
+                    <div className="alert-row" key={warning.name}>
+                      <div>
+                        <strong>{warning.name}</strong>
+                        <p>{warning.detail}</p>
+                      </div>
+                      <span className={`status-chip status-${warning.status.toLowerCase()}`}>
+                        {warning.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </section>
+          ) : (
+            <section className="staff-focus-grid" aria-label="Staff dashboard overview">
+              <article className="panel tasks-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Staff focus</p>
+                    <h3>Top priorities for this shift</h3>
+                  </div>
+                  <span className="panel-badge">{completionRate}% done</span>
+                </div>
+                <div className="task-status-list">
+                  {taskStatusItems.map((task) => (
+                    <div className="task-status-item" key={`${task.label}-staff`}>
+                      <div className="task-status-meta">
+                        <div>
+                          <strong>{task.label}</strong>
+                          <p>{task.detail}</p>
+                        </div>
+                        <span className={`status-chip status-${task.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                          {task.status}
+                        </span>
+                      </div>
+                      <div className="task-progress">
+                        <div className="task-progress-fill" style={{ width: `${task.progress}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel staffing-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Shift schedule</p>
+                    <h3>Who’s on the line</h3>
+                  </div>
+                  <span className="panel-badge">Crew view</span>
+                </div>
+                <div className="roster-list">
+                  {teamMembers.map((member) => (
+                    <div className="schedule-row" key={`${member.name}-staff`}>
+                      <div>
+                        <strong>{member.name}</strong>
+                        <p>{member.role}</p>
+                      </div>
+                      <div className="schedule-meta">
+                        <span>{member.shift}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel alerts-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Low-stock warnings</p>
+                    <h3>Products to conserve</h3>
+                  </div>
+                  <span className="panel-badge">Stay alert</span>
+                </div>
+                <div className="alert-list">
+                  {lowStockWarnings.map((warning) => (
+                    <div className="alert-row" key={`${warning.name}-staff`}>
+                      <div>
+                        <strong>{warning.name}</strong>
+                        <p>{warning.detail}</p>
+                      </div>
+                      <span className={`status-chip status-${warning.status.toLowerCase()}`}>
+                        {warning.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </section>
+          )}
+
+          <section className={`dashboard-grid${isManagerView ? '' : ' dashboard-grid--staff'}`}>
             <section id="prep-board" className="panel prep-panel" tabIndex={0}>
             <div className="panel-heading">
               <div>
@@ -2336,8 +2833,8 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
             <section id="notes" className="panel notes-panel" tabIndex={0}>
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Shift notes</p>
-                <h3>Recent handoff context</h3>
+                <p className="eyebrow">{isManagerView ? 'Shift notes' : 'Team notes'}</p>
+                <h3>{isManagerView ? 'Recent handoff context' : 'Crew updates and handoff notes'}</h3>
               </div>
             </div>
 
@@ -2358,58 +2855,61 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
                 ))
               )}
 
-              <div className="activity-panel">
-                <div className="panel-heading activity-heading">
-                  <div>
-                    <p className="eyebrow">Activity log</p>
-                    <h3>Prep and inventory audit trail</h3>
+              {isManagerView && (
+                <div className="activity-panel">
+                  <div className="panel-heading activity-heading">
+                    <div>
+                      <p className="eyebrow">Activity log</p>
+                      <h3>Prep and inventory audit trail</h3>
+                    </div>
+                    <div className="activity-toolbar">
+                      <span className="panel-badge">{filteredAuditEntries.length} events</span>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={handleClearAuditEntries}
+                        disabled={auditEntries.length === 0}
+                      >
+                        Clear Log
+                      </button>
+                    </div>
                   </div>
-                  <div className="activity-toolbar">
-                    <span className="panel-badge">{filteredAuditEntries.length} events</span>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleClearAuditEntries}
-                      disabled={auditEntries.length === 0}
-                    >
-                      Clear Log
-                    </button>
+
+                  <div className="activity-filters" role="toolbar" aria-label="Filter activity log">
+                    {(['All', 'Prep', 'Inventory'] as AuditFilter[]).map((filterOption) => (
+                      <button
+                        key={filterOption}
+                        className={`secondary-button activity-filter-button ${auditFilter === filterOption ? 'is-active' : ''}`}
+                        type="button"
+                        aria-pressed={auditFilter === filterOption}
+                        onClick={() => setAuditFilter(filterOption)}
+                      >
+                        {filterOption}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="activity-list">
+                    {filteredAuditEntries.length === 0 ? (
+                      <p className="prep-empty">No activity entries match the current filter.</p>
+                    ) : (
+                      filteredAuditEntries.map((entry) => (
+                        <article className="activity-item" key={entry.id}>
+                          <div className="note-meta">
+                            <span>{entry.category}</span>
+                            <span>{entry.timestamp}</span>
+                          </div>
+                          <p>{entry.message}</p>
+                        </article>
+                      ))
+                    )}
                   </div>
                 </div>
-
-                <div className="activity-filters" role="toolbar" aria-label="Filter activity log">
-                  {(['All', 'Prep', 'Inventory'] as AuditFilter[]).map((filterOption) => (
-                    <button
-                      key={filterOption}
-                      className={`secondary-button activity-filter-button ${auditFilter === filterOption ? 'is-active' : ''}`}
-                      type="button"
-                      aria-pressed={auditFilter === filterOption}
-                      onClick={() => setAuditFilter(filterOption)}
-                    >
-                      {filterOption}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="activity-list">
-                  {filteredAuditEntries.length === 0 ? (
-                    <p className="prep-empty">No activity entries match the current filter.</p>
-                  ) : (
-                    filteredAuditEntries.map((entry) => (
-                      <article className="activity-item" key={entry.id}>
-                        <div className="note-meta">
-                          <span>{entry.category}</span>
-                          <span>{entry.timestamp}</span>
-                        </div>
-                        <p>{entry.message}</p>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </section>
 
+            {isManagerView && (
             <section id="recipes" className="panel recipes-panel" tabIndex={0}>
               <div className="panel-heading">
                 <div>
@@ -2627,11 +3127,12 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
                 )}
               </div>
             </section>
+            )}
           </section>
       </main>
 
       <nav className="bottom-tab-bar" aria-label="Quick navigation">
-        {sectionIds.map((sectionId) => (
+        {visibleSectionIds.map((sectionId) => (
           <a
             key={sectionId}
             href={`#${sectionId}`}
