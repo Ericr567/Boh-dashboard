@@ -978,6 +978,11 @@ function Dashboard({
       }))
     : fallbackTaskStatus
   const sortedStaffFocusPrepItems = [...visiblePrepItems].sort((leftItem, rightItem) => {
+    const stationDifference = stationOrder[leftItem.station] - stationOrder[rightItem.station]
+    if (stationDifference !== 0) {
+      return stationDifference
+    }
+
     const urgencyOrder: Record<'Overdue' | 'Due soon' | 'On track', number> = {
       Overdue: 0,
       'Due soon': 1,
@@ -1006,9 +1011,10 @@ function Dashboard({
   })
   const staffFocusTaskStatusItems = sortedStaffFocusPrepItems.slice(0, 4).map((item) => ({
     label: item.name,
-    detail: `${item.station} • due ${item.dueTime}`,
+    detail: `${item.station} • due ${item.dueTime}${item.quantity ? ` • ${item.quantity} on hand` : ''}`,
     progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
     status: item.status,
+    priority: item.priority,
   }))
   const staffOnShiftCount = signedInTeamMembers.length
   const lateAttendanceCount = 0
@@ -2551,9 +2557,14 @@ function Dashboard({
                             <strong>{task.label}</strong>
                             <p>{task.detail}</p>
                           </div>
-                          <span className={`status-chip status-${task.status.toLowerCase().replace(/\s+/g, '-')}`}>
-                            {task.status}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span className={`priority-chip priority-${task.priority.toLowerCase()}`}>
+                              {task.priority}
+                            </span>
+                            <span className={`status-chip status-${task.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                              {task.status}
+                            </span>
+                          </div>
                         </div>
                         <div className="task-progress">
                           <div className="task-progress-fill" style={{ width: `${task.progress}%` }} />
