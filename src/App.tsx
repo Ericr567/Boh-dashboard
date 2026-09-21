@@ -3,7 +3,7 @@ import './App.css'
 
 type StationName = 'Grill' | 'Saute' | 'Pastry' | 'Pantry' | 'Expo' | 'Head Chef' | 'Sous Chef'
 
-type PrepStatus = 'Not Started' | 'In Progress' | 'Ready'
+type PrepStatus = 'Queued' | 'Not Started' | 'In Progress' | 'Held' | 'Blocked' | 'Ready'
 type PrepPriority = 'Low' | 'Medium' | 'High'
 
 type PrepItem = {
@@ -49,6 +49,7 @@ type AuditEntry = {
 type AuditFilter = 'All' | AuditEntry['category']
 type PrepStationFilter = 'All' | StationName
 type InventoryStatusFilter = 'All' | 'OK' | 'Low' | 'Critical'
+type PrepStatusFilter = 'All' | PrepStatus
 
 type RecipeCategory = 'Sauce' | 'Protein' | 'Sides' | 'Dessert' | 'Soup' | 'Salad' | 'Bake' | 'Other'
 
@@ -75,6 +76,15 @@ type KitchenProfile = {
   id: string
   name: string
   createdAt: string
+  joinCode: string
+}
+
+type UserProfile = {
+  id: string
+  name: string
+  role: string
+  kitchenId: string | null
+  createdAt: string
 }
 
 type BackupPayload = {
@@ -89,6 +99,7 @@ type BackupPayload = {
 }
 
 const stationNames: StationName[] = ['Grill', 'Saute', 'Pastry', 'Pantry', 'Expo', 'Head Chef', 'Sous Chef']
+const prepStatusOptions: PrepStatus[] = ['Queued', 'Not Started', 'In Progress', 'Held', 'Blocked', 'Ready']
 
 const recipeCategories: RecipeCategory[] = ['Sauce', 'Protein', 'Sides', 'Dessert', 'Soup', 'Salad', 'Bake', 'Other']
 
@@ -106,6 +117,8 @@ const legacySeededAuditIds = new Set(['audit-1', 'audit-2'])
 const kitchenMetaKeys = {
   kitchens: 'lineflow.kitchens',
   activeKitchenId: 'lineflow.activeKitchenId',
+  profiles: 'lineflow.profiles',
+  activeProfileId: 'lineflow.activeProfileId',
 } as const
 
 // Data keys namespaced per kitchen
@@ -152,6 +165,11 @@ const createRuntimeId = (prefix: string) => {
   return `${prefix}-${fallbackIdCounter}`
 }
 
+const generateJoinCode = () => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
+}
+
 const legacyStationNames: Partial<Record<string, StationName>> = {
   Prep: 'Pantry',
   Fry: 'Saute',
@@ -173,7 +191,7 @@ const normalizeStationName = (value: unknown, fallback: StationName): StationNam
 }
 
 const isPrepStatus = (value: unknown): value is PrepStatus =>
-  value === 'Not Started' || value === 'In Progress' || value === 'Ready'
+  value === 'Queued' || value === 'Not Started' || value === 'In Progress' || value === 'Held' || value === 'Blocked' || value === 'Ready'
 
 const isPrepPriority = (value: unknown): value is PrepPriority =>
   value === 'Low' || value === 'Medium' || value === 'High'
@@ -206,6 +224,57 @@ const normalizeImportedPrepItems = (value: unknown): PrepItem[] => {
       }
     })
     .filter((item): item is PrepItem => item !== null)
+}
+
+const parseDueTime = (dueTime: string): number | null => {
+  if (!dueTime || typeof dueTime !== 'string') {
+    return null
+  }
+
+  const match = dueTime.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i)
+  if (!match) {
+    return null
+  }
+
+  let hour = Number(match[1])
+  const minutes = Number(match[2] ?? '0')
+  const period = match[3]?.toUpperCase()
+
+  if (period === 'AM' && hour === 12) {
+    hour = 0
+  } else if (period === 'PM' && hour !== 12) {
+    hour += 12
+  }
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minutes)) {
+    return null
+  }
+
+  return hour * 60 + minutes
+}
+
+const getPrepUrgency = (item: PrepItem, now = new Date()): 'Overdue' | 'Due soon' | 'On track' => {
+  if (item.status === 'Ready' || item.status === 'Blocked') {
+    return item.status === 'Blocked' ? 'Due soon' : 'On track'
+  }
+
+  const dueMinutes = parseDueTime(item.dueTime)
+  if (dueMinutes === null) {
+    return 'On track'
+  }
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  const thresholdMinutes = dueMinutes - 45
+
+  if (currentMinutes > dueMinutes) {
+    return 'Overdue'
+  }
+
+  if (currentMinutes >= thresholdMinutes) {
+    return 'Due soon'
+  }
+
+  return 'On track'
 }
 
 const isBackupPayload = (value: unknown): value is BackupPayload => {
@@ -521,10 +590,18 @@ const fallbackTaskStatus = [
   { label: 'Dessert plating setup', detail: 'Pastry • due 4:00 PM', progress: 22, status: 'Not Started' as PrepStatus },
 ]
 
-function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
+function Dashboard({
+  kitchenId,
+  kitchens,
+  onManageKitchens,
+  activeProfileName,
+  onSwitchProfile,
+}: {
   kitchenId: string
   kitchens: KitchenProfile[]
   onManageKitchens: () => void
+  activeProfileName: string
+  onSwitchProfile: () => void
 }) {
   const storageKeys = makeStorageKeys(kitchenId)
   const activeKitchen = kitchens.find((k) => k.id === kitchenId)
@@ -569,6 +646,7 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
   const [newEightySixChange, setNewEightySixChange] = useState('')
   const [prepSearchQuery, setPrepSearchQuery] = useState('')
   const [prepStationFilter, setPrepStationFilter] = useState<PrepStationFilter>('All')
+  const [prepStatusFilter, setPrepStatusFilter] = useState<PrepStatusFilter>('All')
   const [inventorySearchQuery, setInventorySearchQuery] = useState('')
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState<InventoryStatusFilter>('All')
   const [undoState, setUndoState] = useState<UndoState | null>(null)
@@ -586,6 +664,16 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
       return window.localStorage.getItem(makeStorageKeys(kitchenId).serviceTime) ?? '17:30'
     } catch {
       return '17:30'
+    }
+  })
+  const [totalReservations, setTotalReservations] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    try {
+      const raw = window.localStorage.getItem(`${makeStorageKeys(kitchenId).serviceTime}-reservations`)
+      const value = Number(raw ?? '0')
+      return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+    } catch {
+      return 0
     }
   })
   const [isEditingServiceTime, setIsEditingServiceTime] = useState(false)
@@ -715,8 +803,9 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
     const query = prepSearchQuery.trim().toLowerCase()
     const matchesQuery = !query || item.name.toLowerCase().includes(query)
     const matchesStation = prepStationFilter === 'All' || item.station === prepStationFilter
+    const matchesStatus = prepStatusFilter === 'All' || item.status === prepStatusFilter
 
-    return matchesQuery && matchesStation
+    return matchesQuery && matchesStation && matchesStatus
   })
 
   const filteredInventoryItems = inventoryItems.filter((item) => {
@@ -809,6 +898,19 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
   const staffOnShiftCount = teamMembers.filter((member) => member.status !== 'Off Today').length
   const lateAttendanceCount = teamMembers.filter((member) => member.status === 'Late').length
   const urgentPrepCount = visiblePrepItems.filter((item) => item.priority === 'High').length
+  const blockedPrepCount = visiblePrepItems.filter((item) => item.status === 'Blocked').length
+  const overduePrepCount = visiblePrepItems.filter((item) => getPrepUrgency(item, now) === 'Overdue').length
+  const recommendedReorders = inventoryItems
+    .filter((item) => getInventoryStatus(item.quantity, item.threshold) !== 'OK')
+    .map((item) => ({
+      name: item.name,
+      status: getInventoryStatus(item.quantity, item.threshold),
+      quantity: item.quantity,
+      threshold: item.threshold,
+      unit: item.unit,
+      reorderQty: Math.max(item.threshold * 2, 1),
+    }))
+    .slice(0, 3)
   const dashboardHeroTitle =
     dashboardView === 'Manager'
       ? 'Manager dashboard for sales, labor, staffing, and service control'
@@ -817,6 +919,15 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
     dashboardView === 'Manager'
       ? `${selectedMetrics.sales} in tracked sales, ${selectedMetrics.laborCost} labor, and ${visibleLowStockCount} stock warning${visibleLowStockCount === 1 ? '' : 's'} need review.`
       : `${openPrepCount} open prep item${openPrepCount === 1 ? '' : 's'}, ${urgentPrepCount} urgent task${urgentPrepCount === 1 ? '' : 's'}, and ${readyPrepCount} ready-to-fire item${readyPrepCount === 1 ? '' : 's'} for the shift.`
+
+  const serviceAlerts = [
+    ...visiblePrepItems
+      .filter((item) => item.status === 'Blocked' || getPrepUrgency(item, now) === 'Overdue')
+      .slice(0, 3)
+      .map((item) => `${item.name} needs attention on ${item.station}`),
+    ...recommendedReorders.slice(0, 2).map((item) => `${item.name} is below reorder point`),
+  ].slice(0, 4)
+
   const snapshotCards = dashboardView === 'Manager'
     ? [
         {
@@ -870,6 +981,23 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
           className: 'accent-amber',
         },
       ]
+
+  const prepTolerance = totalReservations > 0 ? Math.round(totalReservations * 0.15) : 0
+  const prepLowerBound = totalReservations > 0 ? Math.max(0, totalReservations - prepTolerance) : 0
+  const prepUpperBound = totalReservations > 0 ? totalReservations + prepTolerance : 0
+  const currentPrepLoad = visiblePrepItems.length
+
+  let prepTargetStatus = 'On target'
+  if (totalReservations > 0) {
+    if (currentPrepLoad >= prepLowerBound && currentPrepLoad <= prepUpperBound) {
+      prepTargetStatus = 'On target'
+    } else if (currentPrepLoad < prepLowerBound) {
+      prepTargetStatus = 'Under target'
+    } else {
+      prepTargetStatus = 'Over target'
+    }
+  }
+
   const isManagerView = dashboardView === 'Manager'
   const visibleSectionIds: SectionId[] = isManagerView
     ? sectionIds
@@ -1152,6 +1280,12 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      window.localStorage.setItem(`${storageKeys.serviceTime}-reservations`, String(totalReservations))
+    }
+  }, [totalReservations, storageKeys.serviceTime])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.recipes, JSON.stringify(recipes))
     }
   }, [recipes, storageKeys.recipes])
@@ -1246,7 +1380,7 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
       name,
       station: newPrepStation,
       priority: newPrepPriority,
-      status: 'Not Started',
+      status: 'Queued',
       dueTime: newPrepDueTime.trim() || 'TBD',
       quantity: newPrepQuantity.trim(),
       assignee: newPrepAssignee,
@@ -1447,10 +1581,12 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
     if (status === 'Ready' && targetItem.status !== 'Ready') {
       addShiftNote(targetItem.station, `${targetItem.name} marked ready on ${targetItem.station}.`)
       addAuditEntry('Prep', `${targetItem.name} marked ready on ${targetItem.station}.`)
-
       announceAction(`${targetItem.name} marked ready.`)
-    } else if (status === 'In Progress' && targetItem.status === 'Not Started') {
+    } else if (status === 'In Progress' && (targetItem.status === 'Not Started' || targetItem.status === 'Queued')) {
       announceAction(`${targetItem.name} fired on ${targetItem.station}.`)
+    } else if (status === 'Blocked' && targetItem.status !== 'Blocked') {
+      addAuditEntry('Prep', `${targetItem.name} blocked on ${targetItem.station}.`)
+      announceAction(`${targetItem.name} marked blocked.`)
     }
   }
 
@@ -1626,6 +1762,19 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
               Switch
             </button>
           </div>
+          <div className="profile-badge">
+            <span className="profile-badge-name">{activeProfileName}</span>
+            <button
+              className="profile-switch-button"
+              type="button"
+              onClick={() => {
+                setIsSidebarOpen(false)
+                onSwitchProfile()
+              }}
+            >
+              Switch profile
+            </button>
+          </div>
           <p className="brand-copy">
             {dashboardView === 'Manager'
               ? 'Manager workspace for sales, labor, stock visibility, and shift handoff.'
@@ -1651,6 +1800,25 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
           <span className="sidebar-label">Current shift</span>
           <strong>{shiftLabel}</strong>
           <p className="sidebar-note">Data is stored locally in this browser.</p>
+          <div className="kitchen-share-block">
+            <span className="sidebar-label">Kitchen group</span>
+            <strong>{activeKitchen?.joinCode ?? '—'}</strong>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={async () => {
+                const inviteLink = `lineflow://kitchen/join?code=${activeKitchen?.joinCode ?? ''}`
+                try {
+                  await navigator.clipboard.writeText(inviteLink)
+                  announceAction('Kitchen invite link copied.')
+                } catch {
+                  window.prompt('Copy this kitchen invite link:', inviteLink)
+                }
+              }}
+            >
+              Copy join link
+            </button>
+          </div>
           <div className="sidebar-actions">
             <button className="secondary-button" type="button" onClick={handleExportData}>
               Export Backup
@@ -1658,16 +1826,16 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
             <button className="secondary-button" type="button" onClick={handleRequestImport}>
               Import Backup
             </button>
-            <input
-              ref={importFileRef}
-              type="file"
-              accept="application/json"
-              onChange={handleImportFileChange}
-              className="sr-only"
-              tabIndex={-1}
-              aria-label="Import LineFlow backup"
-            />
           </div>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept="application/json"
+            onChange={handleImportFileChange}
+            className="sr-only"
+            tabIndex={-1}
+            aria-label="Import LineFlow backup"
+          />
           {backupError && (
             <p className="form-error" role="alert">
               {backupError}
@@ -1793,6 +1961,14 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
               <strong>{urgentPrepCount}</strong>
             </div>
             <div className="role-stat">
+              <span>Blocked</span>
+              <strong>{blockedPrepCount}</strong>
+            </div>
+            <div className="role-stat">
+              <span>Overdue</span>
+              <strong>{overduePrepCount}</strong>
+            </div>
+            <div className="role-stat">
               <span>Low stock</span>
               <strong>{visibleLowStockCount}</strong>
             </div>
@@ -1804,6 +1980,39 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
             {handoffMessage}
           </p>
         )}
+
+        {serviceAlerts.length > 0 && (
+          <div className="service-alert-banner" role="status" aria-live="polite">
+            <span className="eyebrow">Service alerts</span>
+            <strong>{serviceAlerts[0]}</strong>
+            {serviceAlerts.length > 1 && <span>{serviceAlerts.slice(1).join(' • ')}</span>}
+          </div>
+        )}
+
+        <div className="reservation-target-card" aria-label="Reservation-based prep target">
+          <div>
+            <p className="eyebrow">Prep target</p>
+            <h3>Reservations to prep equation</h3>
+          </div>
+          <div className="reservation-target-controls">
+            <label>
+              <span>Total reservations</span>
+              <input
+                type="number"
+                min={0}
+                value={totalReservations}
+                onChange={(event) => setTotalReservations(Math.max(0, Number(event.target.value) || 0))}
+              />
+            </label>
+            <div className="reservation-target-summary">
+              <strong>{prepLowerBound}–{prepUpperBound}</strong>
+              <span>target range, using $prep = reservations × 15\%$</span>
+            </div>
+          </div>
+          <p className="reservation-target-status">
+            Current open prep: {currentPrepLoad} · {prepTargetStatus}
+          </p>
+        </div>
 
         {isFirstRun && (
           <section className="onboarding-card" aria-label="First run setup">
@@ -2193,6 +2402,17 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
                     </option>
                   ))}
                 </select>
+                <select
+                  className="toolbar-select"
+                  value={prepStatusFilter}
+                  onChange={(event) => setPrepStatusFilter(event.target.value as PrepStatusFilter)}
+                  aria-label="Filter prep by status"
+                >
+                  <option value="All">All states</option>
+                  {prepStatusOptions.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
               </div>
 
               {isPrepFormOpen && (
@@ -2295,59 +2515,71 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
                 filteredPrepItems.map((item) => {
                   const isUrgent = isPreServiceUrgent && item.status !== 'Ready'
                   return (
-                  <article
-                    className={`prep-card${isUrgent ? ' prep-card--urgent' : ''}`}
-                    key={item.id}
-                  >
-                    <div className="prep-header-row">
-                      <label className="prep-select-label" aria-label={`Select ${item.name}`}>
-                        <input
-                          type="checkbox"
-                          className="prep-select-checkbox"
-                          checked={selectedPrepIds.has(item.id)}
-                          onChange={() => togglePrepSelection(item.id)}
-                        />
-                      </label>
-                      <div>
-                        <h4>
-                          {item.name}
-                          {isUrgent && <span className="urgency-badge">Urgent</span>}
-                        </h4>
-                        <p>{item.station} station{item.assignee ? ` — ${item.assignee}` : ''}</p>
+                    <article
+                      className={`prep-card${isUrgent ? ' prep-card--urgent' : ''}`}
+                      key={item.id}
+                    >
+                      <div className="prep-header-row">
+                        <label className="prep-select-label" aria-label={`Select ${item.name}`}>
+                          <input
+                            type="checkbox"
+                            className="prep-select-checkbox"
+                            checked={selectedPrepIds.has(item.id)}
+                            onChange={() => togglePrepSelection(item.id)}
+                          />
+                        </label>
+                        <div>
+                          <h4>
+                            {item.name}
+                            {isUrgent && <span className="urgency-badge">Urgent</span>}
+                          </h4>
+                          <p>{item.station} station{item.assignee ? ` — ${item.assignee}` : ''}</p>
+                        </div>
+                        <div className="prep-status-controls">
+                          <span className={`status-chip status-${item.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {item.status}
+                          </span>
+                          <select
+                            className="prep-status-select"
+                            value={item.status}
+                            onChange={(event) => updatePrepItemStatus(item.id, event.target.value as PrepStatus)}
+                            aria-label={`Change status for ${item.name}`}
+                          >
+                            {prepStatusOptions.map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                      <span className={`status-chip status-${item.status.toLowerCase().replace(/\s+/g, '-')}`}>
-                        {item.status}
-                      </span>
-                    </div>
 
-                    <div className="prep-meta">
-                      <span className={`priority-chip priority-${item.priority.toLowerCase()}`}>{item.priority} priority</span>
-                      <span>Due {item.dueTime}</span>
-                      {item.quantity && <span>{item.quantity}</span>}
-                    </div>
-                    {item.status === 'Not Started' && (
-                      <div className="prep-card-fire">
-                        <button
-                          className="fire-button"
-                          type="button"
-                          onClick={() => updatePrepItemStatus(item.id, 'In Progress')}
-                        >
-                          Fire it →
-                        </button>
+                      <div className="prep-meta">
+                        <span className={`priority-chip priority-${item.priority.toLowerCase()}`}>{item.priority} priority</span>
+                        <span>Due {item.dueTime}</span>
+                        {item.quantity && <span>{item.quantity}</span>}
                       </div>
-                    )}
-                    {item.status === 'In Progress' && (
-                      <div className="prep-card-fire">
-                        <button
-                          className="done-button"
-                          type="button"
-                          onClick={() => updatePrepItemStatus(item.id, 'Ready')}
-                        >
-                          Mark Ready ✓
-                        </button>
-                      </div>
-                    )}
-                  </article>
+                      {item.status === 'Not Started' || item.status === 'Queued' ? (
+                        <div className="prep-card-fire">
+                          <button
+                            className="fire-button"
+                            type="button"
+                            onClick={() => updatePrepItemStatus(item.id, 'In Progress')}
+                          >
+                            Fire it →
+                          </button>
+                        </div>
+                      ) : null}
+                      {item.status === 'In Progress' ? (
+                        <div className="prep-card-fire">
+                          <button
+                            className="done-button"
+                            type="button"
+                            onClick={() => updatePrepItemStatus(item.id, 'Ready')}
+                          >
+                            Mark Ready ✓
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
                   )
                 })
               )}
@@ -2397,6 +2629,23 @@ function Dashboard({ kitchenId, kitchens, onManageKitchens }: {
                   <option value="Critical">Critical</option>
                 </select>
               </div>
+
+              {recommendedReorders.length > 0 && (
+                <div className="reorder-list" aria-label="Recommended reorder actions">
+                  <p className="eyebrow">Reorder suggestions</p>
+                  {recommendedReorders.map((item) => (
+                    <div className="reorder-row" key={item.name}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <p>{item.quantity} {item.unit} left · threshold {item.threshold}</p>
+                      </div>
+                      <span className={`status-chip status-${item.status.toLowerCase()}`}>
+                        {item.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {isInventoryFormOpen && (
                 <form
@@ -3213,7 +3462,7 @@ const loadKitchens = (): KitchenProfile[] => {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.filter((k): k is KitchenProfile =>
-      k && typeof k.id === 'string' && typeof k.name === 'string',
+      k && typeof k.id === 'string' && typeof k.name === 'string' && typeof k.joinCode === 'string',
     )
   } catch {
     return []
@@ -3222,6 +3471,24 @@ const loadKitchens = (): KitchenProfile[] => {
 
 const saveKitchens = (kitchens: KitchenProfile[]) => {
   window.localStorage.setItem(kitchenMetaKeys.kitchens, JSON.stringify(kitchens))
+}
+
+const loadProfiles = (): UserProfile[] => {
+  try {
+    const raw = window.localStorage.getItem(kitchenMetaKeys.profiles)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((profile): profile is UserProfile =>
+      profile && typeof profile.id === 'string' && typeof profile.name === 'string' && typeof profile.role === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+const saveProfiles = (profiles: UserProfile[]) => {
+  window.localStorage.setItem(kitchenMetaKeys.profiles, JSON.stringify(profiles))
 }
 
 const hasLegacyData = () => {
@@ -3239,6 +3506,14 @@ const hasLegacyData = () => {
 
 function App() {
   const [kitchens, setKitchens] = useState<KitchenProfile[]>(() => loadKitchens())
+  const [profiles, setProfiles] = useState<UserProfile[]>(() => loadProfiles())
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(kitchenMetaKeys.activeProfileId)
+    } catch {
+      return null
+    }
+  })
   const [activeKitchenId, setActiveKitchenId] = useState<string | null>(() => {
     try {
       return window.localStorage.getItem(kitchenMetaKeys.activeKitchenId)
@@ -3254,12 +3529,115 @@ function App() {
     return !savedId || !kitchenList.some((k) => k.id === savedId)
   })
   const [newKitchenName, setNewKitchenName] = useState('')
+  const [newProfileName, setNewProfileName] = useState('')
+  const [newProfileRole, setNewProfileRole] = useState('Line Cook')
+  const [joinCode, setJoinCode] = useState('')
   const [kitchenFormError, setKitchenFormError] = useState('')
+  const [profileFormError, setProfileFormError] = useState('')
+
+  const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? null
+
+  const updateProfileKitchen = (profileId: string, kitchenId: string | null) => {
+    setProfiles((currentProfiles) => {
+      const nextProfiles = currentProfiles.map((profile) =>
+        profile.id === profileId ? { ...profile, kitchenId } : profile,
+      )
+      saveProfiles(nextProfiles)
+      return nextProfiles
+    })
+  }
+
+  const selectProfile = (profileId: string) => {
+    const profile = profiles.find((entry) => entry.id === profileId)
+    setActiveProfileId(profileId)
+    window.localStorage.setItem(kitchenMetaKeys.activeProfileId, profileId)
+    if (profile && profile.kitchenId) {
+      setActiveKitchenId(profile.kitchenId)
+      window.localStorage.setItem(kitchenMetaKeys.activeKitchenId, profile.kitchenId)
+      setShowSelector(false)
+      return
+    }
+    setShowSelector(true)
+    window.localStorage.removeItem(kitchenMetaKeys.activeKitchenId)
+    setActiveKitchenId(null)
+  }
 
   const selectKitchen = (kitchenId: string) => {
     setActiveKitchenId(kitchenId)
     window.localStorage.setItem(kitchenMetaKeys.activeKitchenId, kitchenId)
+    if (activeProfileId) {
+      updateProfileKitchen(activeProfileId, kitchenId)
+    }
     setShowSelector(false)
+  }
+
+  const handleCreateProfile = () => {
+    const name = newProfileName.trim()
+    if (!name) {
+      setProfileFormError('Enter your name to create a profile.')
+      return
+    }
+
+    const profile: UserProfile = {
+      id: createRuntimeId('profile'),
+      name,
+      role: newProfileRole.trim() || 'Line Cook',
+      kitchenId: null,
+      createdAt: new Date().toISOString(),
+    }
+
+    const updated = [...profiles, profile]
+    setProfiles(updated)
+    saveProfiles(updated)
+    setActiveProfileId(profile.id)
+    window.localStorage.setItem(kitchenMetaKeys.activeProfileId, profile.id)
+    setNewProfileName('')
+    setNewProfileRole('Line Cook')
+    setProfileFormError('')
+    setShowSelector(true)
+  }
+
+  const handleJoinKitchen = () => {
+    const code = joinCode.trim().toUpperCase()
+    const targetKitchen = kitchens.find((kitchen) => kitchen.joinCode === code)
+
+    if (!targetKitchen) {
+      setKitchenFormError('That kitchen code was not found. Try again or create a new kitchen.')
+      return
+    }
+
+    setKitchenFormError('')
+    selectKitchen(targetKitchen.id)
+  }
+
+  const handleSwitchProfile = () => {
+    window.localStorage.removeItem(kitchenMetaKeys.activeProfileId)
+    window.localStorage.removeItem(kitchenMetaKeys.activeKitchenId)
+    setActiveProfileId(null)
+    setActiveKitchenId(null)
+    setShowSelector(true)
+  }
+
+  const handleDeleteProfile = (profileId: string) => {
+    const target = profiles.find((profile) => profile.id === profileId)
+    if (!target || !window.confirm(`Delete "${target.name}" from your saved profiles?`)) {
+      return
+    }
+
+    const nextProfiles = profiles.filter((profile) => profile.id !== profileId)
+    setProfiles(nextProfiles)
+    saveProfiles(nextProfiles)
+
+    if (activeProfileId === profileId) {
+      window.localStorage.removeItem(kitchenMetaKeys.activeProfileId)
+      setActiveProfileId(null)
+    }
+
+    if (target.kitchenId && activeKitchenId === target.kitchenId) {
+      window.localStorage.removeItem(kitchenMetaKeys.activeKitchenId)
+      setActiveKitchenId(null)
+      setShowSelector(true)
+    }
   }
 
   const handleCreateKitchen = () => {
@@ -3276,6 +3654,7 @@ function App() {
       id: createRuntimeId('kitchen'),
       name,
       createdAt: new Date().toISOString(),
+      joinCode: generateJoinCode(),
     }
     const updated = [...kitchens, newKitchen]
     setKitchens(updated)
@@ -3288,7 +3667,6 @@ function App() {
   const handleDeleteKitchen = (kitchenId: string) => {
     const target = kitchens.find((k) => k.id === kitchenId)
     if (!target || !window.confirm(`Delete "${target.name}" and all its data? This cannot be undone.`)) return
-    // Clear all namespaced keys for this kitchen
     const keys = makeStorageKeys(kitchenId)
     Object.values(keys).forEach((k) => window.localStorage.removeItem(k))
     const updated = kitchens.filter((k) => k.id !== kitchenId)
@@ -3298,9 +3676,15 @@ function App() {
       setActiveKitchenId(null)
       window.localStorage.removeItem(kitchenMetaKeys.activeKitchenId)
     }
+    setProfiles((currentProfiles) => {
+      const nextProfiles = currentProfiles.map((profile) =>
+        profile.kitchenId === kitchenId ? { ...profile, kitchenId: null } : profile,
+      )
+      saveProfiles(nextProfiles)
+      return nextProfiles
+    })
   }
 
-  // One-time migration: if legacy data exists and a new kitchen is being created, offer to migrate
   const handleMigrateAndCreate = () => {
     const name = newKitchenName.trim()
     if (!name) { setKitchenFormError('Enter a name for this kitchen.'); return }
@@ -3308,6 +3692,7 @@ function App() {
       id: createRuntimeId('kitchen'),
       name,
       createdAt: new Date().toISOString(),
+      joinCode: generateJoinCode(),
     }
     const updated = [...kitchens, newKitchen]
     setKitchens(updated)
@@ -3320,13 +3705,90 @@ function App() {
 
   const legacyDataExists = kitchens.length === 0 && hasLegacyData()
 
+  if (!activeProfileId) {
+    return (
+      <div className="kitchen-selector">
+        <div className="kitchen-selector-inner">
+          <p className="brand-kicker">BOH operations</p>
+          <h1 className="brand-title">LineFlow</h1>
+          <p className="brand-copy">Create your profile to join a kitchen team or start your own prep workspace.</p>
+
+          {profiles.length > 0 && (
+            <section className="profile-list" aria-label="Saved profiles">
+              <p className="eyebrow" style={{ marginBottom: '0.65rem' }}>Saved profiles</p>
+              <div className="profile-list-grid">
+                {profiles.map((profile) => (
+                  <div className="profile-list-row" key={profile.id}>
+                    <button
+                      type="button"
+                      className="profile-list-item"
+                      onClick={() => selectProfile(profile.id)}
+                    >
+                      <span className="profile-list-name">{profile.name}</span>
+                      <span className="profile-list-meta">{profile.role}</span>
+                    </button>
+                    <button
+                      className="secondary-button danger-button profile-delete-button"
+                      type="button"
+                      onClick={() => handleDeleteProfile(profile.id)}
+                      aria-label={`Delete ${profile.name}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="profile-form" aria-label="Create user profile">
+            <label>
+              <span>Your name</span>
+              <input
+                className="toolbar-input"
+                value={newProfileName}
+                onChange={(e) => { setNewProfileName(e.target.value); setProfileFormError('') }}
+                placeholder="e.g. Sam, Expo lead"
+                aria-label="Profile name"
+              />
+            </label>
+            <label>
+              <span>Role</span>
+              <select
+                className="toolbar-select"
+                value={newProfileRole}
+                onChange={(e) => setNewProfileRole(e.target.value)}
+                aria-label="Profile role"
+              >
+                <option value="Line Cook">Line Cook</option>
+                <option value="Prep Cook">Prep Cook</option>
+                <option value="Sous Chef">Sous Chef</option>
+                <option value="Chef">Chef</option>
+                <option value="Expo">Expo</option>
+                <option value="Manager">Manager</option>
+              </select>
+            </label>
+            <button className="action-button" type="button" onClick={handleCreateProfile}>
+              Create profile
+            </button>
+            {profileFormError && (
+              <p className="form-error" role="alert" style={{ marginTop: '0.5rem' }}>
+                {profileFormError}
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+    )
+  }
+
   if (showSelector) {
     return (
       <div className="kitchen-selector">
         <div className="kitchen-selector-inner">
           <p className="brand-kicker">BOH operations</p>
           <h1 className="brand-title">LineFlow</h1>
-          <p className="brand-copy">Choose a kitchen to load its data, or create a new one.</p>
+          <p className="brand-copy">{activeProfile ? `${activeProfile.name}, continue with your kitchen team.` : 'Choose a kitchen to load its data, or create a new one.'}</p>
 
           {kitchens.length > 0 && (
             <section className="kitchen-list" aria-label="Your kitchens">
@@ -3339,9 +3801,7 @@ function App() {
                     onClick={() => selectKitchen(kitchen.id)}
                   >
                     <span className="kitchen-list-name">{kitchen.name}</span>
-                    <span className="kitchen-list-date">
-                      Created {new Date(kitchen.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
+                    <span className="kitchen-list-date">Join code: {kitchen.joinCode}</span>
                   </button>
                   <button
                     className="secondary-button danger-button kitchen-delete-button"
@@ -3356,35 +3816,57 @@ function App() {
             </section>
           )}
 
-          <section className="kitchen-create-form" aria-label="Create new kitchen">
-            <p className="eyebrow" style={{ marginBottom: '0.65rem' }}>
-              {kitchens.length === 0 ? 'Create your first kitchen' : 'Add another kitchen'}
-            </p>
-            <div className="kitchen-form-row">
+          <section className="kitchen-create-form" aria-label="Join or create a kitchen">
+            <p className="eyebrow" style={{ marginBottom: '0.65rem' }}>Join my kitchen</p>
+            <div className="kitchen-form-row join-kitchen-row">
               <input
                 className="toolbar-input kitchen-name-input"
-                value={newKitchenName}
-                onChange={(e) => { setNewKitchenName(e.target.value); setKitchenFormError('') }}
-                placeholder="e.g. Main Kitchen, Pastry Station"
-                aria-label="Kitchen name"
+                value={joinCode}
+                onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setKitchenFormError('') }}
+                placeholder="Enter a kitchen code"
+                aria-label="Kitchen join code"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
-                    if (legacyDataExists) {
-                      handleMigrateAndCreate()
-                    } else {
-                      handleCreateKitchen()
-                    }
+                    handleJoinKitchen()
                   }
                 }}
               />
-              <button
-                className="action-button"
-                type="button"
-                onClick={legacyDataExists ? handleMigrateAndCreate : handleCreateKitchen}
-              >
-                {legacyDataExists ? 'Create & Import Existing Data' : 'Create Kitchen'}
+              <button className="secondary-button" type="button" onClick={handleJoinKitchen}>
+                Join kitchen
               </button>
+            </div>
+
+            <div className="kitchen-create-form" style={{ marginTop: '1rem' }}>
+              <p className="eyebrow" style={{ marginBottom: '0.65rem' }}>
+                {kitchens.length === 0 ? 'Create your first kitchen' : 'Add another kitchen'}
+              </p>
+              <div className="kitchen-form-row">
+                <input
+                  className="toolbar-input kitchen-name-input"
+                  value={newKitchenName}
+                  onChange={(e) => { setNewKitchenName(e.target.value); setKitchenFormError('') }}
+                  placeholder="e.g. Main Kitchen, Pastry Station"
+                  aria-label="Kitchen name"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (legacyDataExists) {
+                        handleMigrateAndCreate()
+                      } else {
+                        handleCreateKitchen()
+                      }
+                    }
+                  }}
+                />
+                <button
+                  className="action-button"
+                  type="button"
+                  onClick={legacyDataExists ? handleMigrateAndCreate : handleCreateKitchen}
+                >
+                  {legacyDataExists ? 'Create & Import Existing Data' : 'Create Kitchen'}
+                </button>
+              </div>
             </div>
             {legacyDataExists && kitchens.length === 0 && (
               <p className="kitchen-migrate-note">
@@ -3410,6 +3892,8 @@ function App() {
       kitchenId={activeKitchenId}
       kitchens={kitchens}
       onManageKitchens={() => setShowSelector(true)}
+      activeProfileName={activeProfile?.name ?? 'Profile'}
+      onSwitchProfile={handleSwitchProfile}
     />
   )
 }

@@ -51,6 +51,27 @@
   padding: 1.5rem;
 }
 
+.service-alert-banner {
+  align-items: flex-start;
+  background: linear-gradient(135deg, rgba(255, 122, 102, 0.12), rgba(255, 184, 76, 0.08));
+  border: 1px solid rgba(255, 122, 102, 0.3);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.service-alert-banner strong {
+  color: #f8fbff;
+}
+
+.service-alert-banner span:last-child {
+  color: #c8d4eb;
+  font-size: 0.82rem;
+}
+
 .brand-kicker,
 .eyebrow,
 .sidebar-label,
@@ -832,6 +853,23 @@
   margin-top: 0.85rem;
 }
 
+.prep-status-controls {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.prep-status-select {
+  background: rgba(8, 17, 31, 0.75);
+  border: 1px solid rgba(130, 148, 185, 0.18);
+  border-radius: 10px;
+  color: #f8fbff;
+  font: inherit;
+  min-height: 2rem;
+  padding: 0.3rem 0.5rem;
+}
+
 .status-chip,
 .priority-chip,
 .load-pill {
@@ -856,12 +894,24 @@
   color: #ffd37c;
 }
 
+.status-queued,
+.status-held,
 .status-not-started,
 .status-critical,
 .priority-high,
 .load-heavy {
   background: rgba(255, 122, 102, 0.14);
   color: #ff9f90;
+}
+
+.status-blocked {
+  background: rgba(255, 72, 88, 0.18);
+  color: #ffc1c7;
+}
+
+.status-ready {
+  background: rgba(73, 221, 187, 0.14);
+  color: #77f2d2;
 }
 
 .priority-low {
@@ -883,6 +933,31 @@
 .status-off-today {
   background: rgba(117, 141, 183, 0.14);
   color: #c4d4f2;
+}
+
+.reorder-list {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(130, 148, 185, 0.12);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem;
+}
+
+.reorder-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(130, 148, 185, 0.12);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem;
+}
+
+.reorder-row p {
+  margin: 0.2rem 0 0;
 }
 
 .inventory-item {
@@ -1433,6 +1508,77 @@
   width: 100%;
 }
 
+.profile-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.profile-form label {
+  color: #dfe9fb;
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.profile-form .toolbar-input,
+.profile-form .toolbar-select {
+  width: 100%;
+}
+
+.profile-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.profile-list-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.profile-list-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.profile-list-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(130, 148, 185, 0.18);
+  border-radius: 14px;
+  color: #f8fbff;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+}
+
+.profile-list-item:hover,
+.profile-list-item:focus-visible {
+  background: rgba(78, 109, 242, 0.08);
+  border-color: rgba(78, 109, 242, 0.3);
+  outline: none;
+}
+
+.profile-list-name {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.profile-list-meta {
+  color: #91a4c7;
+  font-size: 0.76rem;
+}
+
+.profile-delete-button {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  padding: 0.45rem 0.75rem;
+}
+
 .kitchen-list {
   display: grid;
   gap: 0.55rem;
@@ -1501,6 +1647,13 @@
   gap: 0.65rem;
 }
 
+.join-kitchen-row {
+  align-items: stretch;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .kitchen-name-input {
   flex: 1 1 200px;
 }
@@ -1512,7 +1665,8 @@
 }
 
 /* ─── Kitchen badge in sidebar ───────────────────── */
-.kitchen-badge {
+.kitchen-badge,
+.profile-badge {
   align-items: center;
   background: rgba(73, 221, 187, 0.07);
   border: 1px solid rgba(73, 221, 187, 0.18);
@@ -1524,7 +1678,8 @@
   padding: 0.5rem 0.75rem;
 }
 
-.kitchen-badge-name {
+.kitchen-badge-name,
+.profile-badge-name {
   color: #d9f8ef;
   font-size: 0.88rem;
   font-weight: 700;
@@ -1533,7 +1688,8 @@
   white-space: nowrap;
 }
 
-.kitchen-switch-button {
+.kitchen-switch-button,
+.profile-switch-button {
   background: transparent;
   border: 1px solid rgba(73, 221, 187, 0.3);
   border-radius: 999px;
@@ -1548,11 +1704,13 @@
   transition: background 160ms ease;
 }
 
-.kitchen-switch-button:hover {
+.kitchen-switch-button:hover,
+.profile-switch-button:hover {
   background: rgba(73, 221, 187, 0.12);
 }
 
-.kitchen-switch-button:focus-visible {
+.kitchen-switch-button:focus-visible,
+.profile-switch-button:focus-visible {
   outline: 3px solid rgba(73, 221, 187, 0.85);
   outline-offset: 3px;
 }
