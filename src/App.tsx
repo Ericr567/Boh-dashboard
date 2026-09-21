@@ -569,19 +569,7 @@ const businessMetricsByRange: Record<
   },
 }
 
-const teamMembers: TeamMember[] = [
-  { name: 'Chef Ana', role: 'Head Chef', shift: '9:00 AM – 6:00 PM', status: 'Clocked In' },
-  { name: 'Luis', role: 'Sous Chef', shift: '11:00 AM – 8:00 PM', status: 'On Time' },
-  { name: 'Mina', role: 'Expo', shift: '12:00 PM – 9:00 PM', status: 'On Time' },
-  { name: 'Jordan', role: 'Prep Cook', shift: '2:00 PM – 10:00 PM', status: 'Late' },
-  { name: 'Tia', role: 'Pastry', shift: 'Off', status: 'Off Today' },
-]
-
-const fallbackLowStockWarnings = [
-  { name: 'Ribeye', status: 'Critical', detail: '6 portions left' },
-  { name: 'Chicken stock', status: 'Low', detail: '2 quarts left' },
-  { name: 'Butter', status: 'Low', detail: '5 pounds left' },
-]
+const fallbackLowStockWarnings: { name: string; status: 'Critical' | 'Low'; detail: string }[] = []
 
 const fallbackTaskStatus = [
   { label: 'Line check complete', detail: 'Opening checklist', progress: 100, status: 'Ready' as PrepStatus },
@@ -593,18 +581,28 @@ const fallbackTaskStatus = [
 function Dashboard({
   kitchenId,
   kitchens,
+  profiles,
   onManageKitchens,
   activeProfileName,
   onSwitchProfile,
 }: {
   kitchenId: string
   kitchens: KitchenProfile[]
+  profiles: UserProfile[]
   onManageKitchens: () => void
   activeProfileName: string
   onSwitchProfile: () => void
 }) {
   const storageKeys = makeStorageKeys(kitchenId)
   const activeKitchen = kitchens.find((k) => k.id === kitchenId)
+  const kitchenTeamMembers: TeamMember[] = profiles
+    .filter((profile) => profile.kitchenId === kitchenId)
+    .map((profile) => ({
+      name: profile.name,
+      role: profile.role,
+      shift: 'Not assigned',
+      status: 'On Time',
+    }))
 
   const [prepItems, setPrepItems] = useState<PrepItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
@@ -870,7 +868,7 @@ function Dashboard({
     : undefined
 
   const selectedMetrics = businessMetricsByRange[dashboardRange]
-  const positiveAttendanceCount = teamMembers.filter(
+  const positiveAttendanceCount = kitchenTeamMembers.filter(
     (member) => member.status === 'Clocked In' || member.status === 'On Time',
   ).length
   const lowStockWarnings = inventoryItems.length > 0
@@ -895,8 +893,8 @@ function Dashboard({
         status: item.status,
       }))
     : fallbackTaskStatus
-  const staffOnShiftCount = teamMembers.filter((member) => member.status !== 'Off Today').length
-  const lateAttendanceCount = teamMembers.filter((member) => member.status === 'Late').length
+  const staffOnShiftCount = kitchenTeamMembers.filter((member) => member.status !== 'Off Today').length
+  const lateAttendanceCount = kitchenTeamMembers.filter((member) => member.status === 'Late').length
   const urgentPrepCount = visiblePrepItems.filter((item) => item.priority === 'High').length
   const blockedPrepCount = visiblePrepItems.filter((item) => item.status === 'Blocked').length
   const overduePrepCount = visiblePrepItems.filter((item) => getPrepUrgency(item, now) === 'Overdue').length
@@ -950,7 +948,7 @@ function Dashboard({
         },
         {
           label: 'Staff attendance',
-          value: `${positiveAttendanceCount}/${teamMembers.length}`,
+          value: `${positiveAttendanceCount}/${kitchenTeamMembers.length}`,
           detail: `${lateAttendanceCount} late and ${staffOnShiftCount} currently on shift.`,
           className: 'accent-coral',
         },
@@ -2182,10 +2180,10 @@ function Dashboard({
                     <p className="eyebrow">Shift schedule</p>
                     <h3>Today’s coverage</h3>
                   </div>
-                  <span className="panel-badge">{teamMembers.length} team</span>
+                  <span className="panel-badge">{kitchenTeamMembers.length} team</span>
                 </div>
                 <div className="roster-list">
-                  {teamMembers.map((member) => (
+                  {kitchenTeamMembers.map((member) => (
                     <div className="schedule-row" key={member.name}>
                       <div>
                         <strong>{member.name}</strong>
@@ -2211,7 +2209,7 @@ function Dashboard({
                   <span className="panel-badge">Live board</span>
                 </div>
                 <div className="attendance-list">
-                  {teamMembers.map((member) => (
+                  {kitchenTeamMembers.map((member) => (
                     <div className="attendance-row" key={`${member.name}-attendance`}>
                       <span>{member.name}</span>
                       <span className={`status-chip status-${member.status.toLowerCase().replace(/\s+/g, '-')}`}>
@@ -2312,7 +2310,7 @@ function Dashboard({
                   <span className="panel-badge">Crew view</span>
                 </div>
                 <div className="roster-list">
-                  {teamMembers.map((member) => (
+                  {kitchenTeamMembers.map((member) => (
                     <div className="schedule-row" key={`${member.name}-staff`}>
                       <div>
                         <strong>{member.name}</strong>
@@ -3891,6 +3889,7 @@ function App() {
       key={activeKitchenId}
       kitchenId={activeKitchenId}
       kitchens={kitchens}
+      profiles={profiles}
       onManageKitchens={() => setShowSelector(true)}
       activeProfileName={activeProfile?.name ?? 'Profile'}
       onSwitchProfile={handleSwitchProfile}
