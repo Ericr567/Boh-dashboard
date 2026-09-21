@@ -39,6 +39,13 @@ type ShiftNote = {
   timestamp: string
 }
 
+type UpcomingParty = {
+  id: string
+  name: string
+  date: string
+  notes: string
+}
+
 type AuditEntry = {
   id: string
   category: 'Prep' | 'Inventory'
@@ -106,6 +113,7 @@ const recipeCategories: RecipeCategory[] = ['Sauce', 'Protein', 'Sides', 'Desser
 const initialInventoryItems: InventoryItem[] = []
 const initialEightySixItems: EightySixItem[] = []
 const initialShiftNotes: ShiftNote[] = []
+const initialUpcomingParties: UpcomingParty[] = []
 const initialAuditEntries: AuditEntry[] = []
 
 const legacySeededInventoryIds = new Set(['inv-1', 'inv-2', 'inv-3'])
@@ -127,6 +135,7 @@ const makeStorageKeys = (kitchenId: string) => ({
   inventoryItems: `lineflow.kitchen.${kitchenId}.inventoryItems`,
   eightySixItems: `lineflow.kitchen.${kitchenId}.eightySixItems`,
   shiftNotes: `lineflow.kitchen.${kitchenId}.shiftNotes`,
+  upcomingParties: `lineflow.kitchen.${kitchenId}.upcomingParties`,
   auditEntries: `lineflow.kitchen.${kitchenId}.auditEntries`,
   teamSchedule: `lineflow.kitchen.${kitchenId}.teamSchedule`,
   serviceTime: `lineflow.kitchen.${kitchenId}.serviceTime`,
@@ -453,6 +462,24 @@ const loadStoredTeamSchedule = (value: unknown): TeamShiftEntry[] => {
     .filter((entry): entry is TeamShiftEntry => entry !== null)
 }
 
+const loadStoredUpcomingParties = (value: unknown): UpcomingParty[] => {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const item = entry as Record<string, unknown>
+      if (typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.date !== 'string') return null
+      return {
+        id: item.id,
+        name: item.name,
+        date: item.date,
+        notes: typeof item.notes === 'string' ? item.notes : '',
+      }
+    })
+    .filter((entry): entry is UpcomingParty => entry !== null)
+}
+
 const loadStoredState = <T,>(key: string, fallback: T, normalize: (value: unknown) => T): T => {
   if (typeof window === 'undefined') {
     return fallback
@@ -482,6 +509,7 @@ const sectionLabels = {
   stations: 'Stations',
   inventory: 'Inventory',
   'eighty-six': "86'd Items",
+  'upcoming-parties': 'Upcoming Parties',
   notes: 'Shift Notes',
   recipes: 'Recipe Book',
 } as const
@@ -495,6 +523,7 @@ const sectionShortLabels: Record<SectionId, string> = {
   stations: 'Stations',
   inventory: 'Stock',
   'eighty-six': "86'd",
+  'upcoming-parties': 'Parties',
   notes: 'Notes',
   recipes: 'Recipes',
 }
@@ -663,6 +692,9 @@ function Dashboard({
   const [shiftNotes, setShiftNotes] = useState<ShiftNote[]>(() =>
     loadStoredState(storageKeys.shiftNotes, initialShiftNotes, loadStoredShiftNotes),
   )
+  const [upcomingParties, setUpcomingParties] = useState<UpcomingParty[]>(() =>
+    loadStoredState(storageKeys.upcomingParties, initialUpcomingParties, loadStoredUpcomingParties),
+  )
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(() =>
     loadStoredState(storageKeys.auditEntries, initialAuditEntries, loadStoredAuditEntries),
   )
@@ -681,6 +713,9 @@ function Dashboard({
   const [newInventoryQuantity, setNewInventoryQuantity] = useState('0')
   const [newInventoryUnit, setNewInventoryUnit] = useState('count')
   const [newInventoryThreshold, setNewInventoryThreshold] = useState('1')
+  const [newPartyName, setNewPartyName] = useState('')
+  const [newPartyDate, setNewPartyDate] = useState('')
+  const [newPartyNotes, setNewPartyNotes] = useState('')
   const [editingInventoryItemId, setEditingInventoryItemId] = useState<string | null>(null)
   const [editingInventoryName, setEditingInventoryName] = useState('')
   const [editingInventoryUnit, setEditingInventoryUnit] = useState('count')
@@ -934,21 +969,47 @@ function Dashboard({
   const totalTrackedTasks = visiblePrepItems.length > 0 ? visiblePrepItems.length : prepItems.length > 0 ? prepItems.length : 9
   const completedTrackedTasks = visiblePrepItems.length > 0 ? visiblePrepItems.filter((item) => item.status === 'Ready').length : prepItems.length > 0 ? readyPrepCount : 7
   const completionRate = Math.round((completedTrackedTasks / totalTrackedTasks) * 100)
-  const taskStatusItems = visiblePrepItems.length > 0
-    ? visiblePrepItems.slice(0, 4).map((item) => ({
+  const managerTaskStatusItems = prepItems.length > 0
+    ? prepItems.slice(0, 4).map((item) => ({
         label: item.name,
         detail: `${item.station} • due ${item.dueTime}`,
         progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
         status: item.status,
       }))
-    : prepItems.length > 0
-      ? prepItems.slice(0, 4).map((item) => ({
-          label: item.name,
-          detail: `${item.station} • due ${item.dueTime}`,
-          progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
-          status: item.status,
-        }))
-      : fallbackTaskStatus
+    : fallbackTaskStatus
+  const sortedStaffFocusPrepItems = [...visiblePrepItems].sort((leftItem, rightItem) => {
+    const urgencyOrder: Record<'Overdue' | 'Due soon' | 'On track', number> = {
+      Overdue: 0,
+      'Due soon': 1,
+      'On track': 2,
+    }
+
+    const leftUrgency = getPrepUrgency(leftItem, now)
+    const rightUrgency = getPrepUrgency(rightItem, now)
+    const urgencyDifference = urgencyOrder[leftUrgency] - urgencyOrder[rightUrgency]
+    if (urgencyDifference !== 0) {
+      return urgencyDifference
+    }
+
+    const leftDueMinutes = parseDueTime(leftItem.dueTime) ?? Number.MAX_SAFE_INTEGER
+    const rightDueMinutes = parseDueTime(rightItem.dueTime) ?? Number.MAX_SAFE_INTEGER
+    if (leftDueMinutes !== rightDueMinutes) {
+      return leftDueMinutes - rightDueMinutes
+    }
+
+    const priorityDifference = priorityScore[rightItem.priority] - priorityScore[leftItem.priority]
+    if (priorityDifference !== 0) {
+      return priorityDifference
+    }
+
+    return leftItem.name.localeCompare(rightItem.name)
+  })
+  const staffFocusTaskStatusItems = sortedStaffFocusPrepItems.slice(0, 4).map((item) => ({
+    label: item.name,
+    detail: `${item.station} • due ${item.dueTime}`,
+    progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
+    status: item.status,
+  }))
   const staffOnShiftCount = signedInTeamMembers.length
   const lateAttendanceCount = 0
   const urgentPrepCount = visiblePrepItems.filter((item) => item.priority === 'High').length
@@ -1374,6 +1435,12 @@ function Dashboard({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      window.localStorage.setItem(storageKeys.upcomingParties, JSON.stringify(upcomingParties))
+    }
+  }, [upcomingParties, storageKeys.upcomingParties])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
       window.localStorage.setItem(storageKeys.auditEntries, JSON.stringify(auditEntries))
     }
   }, [auditEntries, storageKeys.auditEntries])
@@ -1762,6 +1829,37 @@ function Dashboard({
     queueUndoAction("All 86'd items cleared.", () => {
       setEightySixItems(previousItems)
     })
+  }
+
+  const handleAddUpcomingParty = () => {
+    const name = newPartyName.trim()
+    const date = newPartyDate.trim()
+    if (!name || !date) {
+      return
+    }
+
+    const nextParty: UpcomingParty = {
+      id: createRuntimeId('party'),
+      name,
+      date,
+      notes: newPartyNotes.trim(),
+    }
+
+    setUpcomingParties((current) => [nextParty, ...current])
+    setNewPartyName('')
+    setNewPartyDate('')
+    setNewPartyNotes('')
+    announceAction(`${name} added to upcoming parties.`)
+  }
+
+  const handleRemoveUpcomingParty = (partyId: string) => {
+    const target = upcomingParties.find((party) => party.id === partyId)
+    if (!target || !window.confirm(`Remove ${target.name} from upcoming parties?`)) {
+      return
+    }
+
+    setUpcomingParties((current) => current.filter((party) => party.id !== partyId))
+    announceAction(`${target.name} removed from upcoming parties.`)
   }
 
   const handleClearAuditEntries = () => {
@@ -2388,7 +2486,7 @@ function Dashboard({
                   <span className="panel-badge">{completionRate}% done</span>
                 </div>
                 <div className="task-status-list">
-                  {taskStatusItems.map((task) => (
+                  {managerTaskStatusItems.map((task) => (
                     <div className="task-status-item" key={task.label}>
                       <div className="task-status-meta">
                         <div>
@@ -2441,22 +2539,28 @@ function Dashboard({
                   <span className="panel-badge">{completionRate}% done</span>
                 </div>
                 <div className="task-status-list">
-                  {taskStatusItems.map((task) => (
-                    <div className="task-status-item" key={`${task.label}-staff`}>
-                      <div className="task-status-meta">
-                        <div>
-                          <strong>{task.label}</strong>
-                          <p>{task.detail}</p>
-                        </div>
-                        <span className={`status-chip status-${task.status.toLowerCase().replace(/\s+/g, '-')}`}>
-                          {task.status}
-                        </span>
-                      </div>
-                      <div className="task-progress">
-                        <div className="task-progress-fill" style={{ width: `${task.progress}%` }} />
-                      </div>
+                  {staffFocusTaskStatusItems.length === 0 ? (
+                    <div className="empty-state">
+                      <p className="prep-empty">No prep items in hand yet. Add or fire a prep item to update the staff focus bars.</p>
                     </div>
-                  ))}
+                  ) : (
+                    staffFocusTaskStatusItems.map((task) => (
+                      <div className="task-status-item" key={`${task.label}-staff`}>
+                        <div className="task-status-meta">
+                          <div>
+                            <strong>{task.label}</strong>
+                            <p>{task.detail}</p>
+                          </div>
+                          <span className={`status-chip status-${task.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {task.status}
+                          </span>
+                        </div>
+                        <div className="task-progress">
+                          <div className="task-progress-fill" style={{ width: `${task.progress}%` }} />
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </article>
 
@@ -3293,6 +3397,84 @@ function Dashboard({
               </div>
             )}
             </section>
+
+            <section id="upcoming-parties" className="panel notes-panel" tabIndex={0}>
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Upcoming parties</p>
+                <h3>Manual party planning</h3>
+              </div>
+            </div>
+
+            <div className="notes-list">
+              <form
+                className="prep-form"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  handleAddUpcomingParty()
+                }}
+              >
+                <label>
+                  Party name
+                  <input
+                    value={newPartyName}
+                    onChange={(event) => setNewPartyName(event.target.value)}
+                    placeholder="e.g. Birthday dinner"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Date
+                  <input
+                    type="date"
+                    value={newPartyDate}
+                    onChange={(event) => setNewPartyDate(event.target.value)}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Notes
+                  <textarea
+                    className="recipe-textarea"
+                    value={newPartyNotes}
+                    onChange={(event) => setNewPartyNotes(event.target.value)}
+                    rows={3}
+                    placeholder="Guest count, timing, special requests..."
+                  />
+                </label>
+
+                <button className="action-button prep-submit" type="submit">
+                  Add party
+                </button>
+              </form>
+
+              {upcomingParties.length === 0 ? (
+                <div className="empty-state">
+                  <p className="prep-empty">No upcoming parties entered yet.</p>
+                </div>
+              ) : (
+                upcomingParties.map((party) => (
+                  <article className="note-card" key={party.id}>
+                    <div className="note-meta">
+                      <span>{party.date}</span>
+                    </div>
+                    <p><strong>{party.name}</strong>{party.notes ? ` • ${party.notes}` : ''}</p>
+                    <div className="eighty-six-item-actions">
+                      <button
+                        className="secondary-button danger-button"
+                        type="button"
+                        onClick={() => handleRemoveUpcomingParty(party.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
 
             <section id="notes" className="panel notes-panel" tabIndex={0}>
             <div className="panel-heading">
