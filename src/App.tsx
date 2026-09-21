@@ -128,6 +128,7 @@ const makeStorageKeys = (kitchenId: string) => ({
   eightySixItems: `lineflow.kitchen.${kitchenId}.eightySixItems`,
   shiftNotes: `lineflow.kitchen.${kitchenId}.shiftNotes`,
   auditEntries: `lineflow.kitchen.${kitchenId}.auditEntries`,
+  teamSchedule: `lineflow.kitchen.${kitchenId}.teamSchedule`,
   serviceTime: `lineflow.kitchen.${kitchenId}.serviceTime`,
   recipes: `lineflow.kitchen.${kitchenId}.recipes`,
 } as const)
@@ -434,6 +435,24 @@ const loadStoredRecipes = (value: unknown): Recipe[] => {
     .filter((r): r is Recipe => r !== null)
 }
 
+const loadStoredTeamSchedule = (value: unknown): TeamShiftEntry[] => {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const item = entry as Record<string, unknown>
+      if (typeof item.profileId !== 'string') return null
+      return {
+        profileId: item.profileId,
+        inTime: typeof item.inTime === 'string' ? item.inTime : '',
+        outTime: typeof item.outTime === 'string' ? item.outTime : '',
+        clockedIn: Boolean(item.clockedIn),
+      }
+    })
+    .filter((entry): entry is TeamShiftEntry => entry !== null)
+}
+
 const loadStoredState = <T,>(key: string, fallback: T, normalize: (value: unknown) => T): T => {
   if (typeof window === 'undefined') {
     return fallback
@@ -524,6 +543,13 @@ type TeamMember = {
   status: TeamStatus
 }
 
+type TeamShiftEntry = {
+  profileId: string
+  inTime: string
+  outTime: string
+  clockedIn: boolean
+}
+
 const businessMetricsByRange: Record<
   DashboardRange,
   {
@@ -585,6 +611,7 @@ function Dashboard({
   onManageKitchens,
   activeProfileName,
   onSwitchProfile,
+  onAddTeamMemberToKitchen,
 }: {
   kitchenId: string
   kitchens: KitchenProfile[]
@@ -592,18 +619,40 @@ function Dashboard({
   onManageKitchens: () => void
   activeProfileName: string
   onSwitchProfile: () => void
+  onAddTeamMemberToKitchen: (profileId: string, kitchenId: string) => void
 }) {
   const storageKeys = makeStorageKeys(kitchenId)
   const activeKitchen = kitchens.find((k) => k.id === kitchenId)
-  const kitchenTeamMembers: TeamMember[] = profiles
-    .filter((profile) => profile.kitchenId === kitchenId)
-    .map((profile) => ({
-      name: profile.name,
-      role: profile.role,
-      shift: 'Not assigned',
-      status: 'On Time',
-    }))
 
+  const [teamShiftEntries, setTeamShiftEntries] = useState<TeamShiftEntry[]>(() =>
+    loadStoredState(storageKeys.teamSchedule, [], loadStoredTeamSchedule),
+  )
+
+  const teamRosterMembers = profiles
+    .filter((profile) => profile.kitchenId === kitchenId)
+    .map((profile) => {
+      const shiftEntry = teamShiftEntries.find((entry) => entry.profileId === profile.id)
+      const clockedIn = shiftEntry?.clockedIn ?? false
+      return {
+        profileId: profile.id,
+        name: profile.name,
+        role: profile.role,
+        shift: clockedIn ? `${shiftEntry?.inTime || '—'} – ${shiftEntry?.outTime || '—'}` : 'No shift',
+        status: clockedIn ? 'Clocked In' : 'Off Today',
+        inTime: shiftEntry?.inTime ?? '',
+        outTime: shiftEntry?.outTime ?? '',
+        clockedIn,
+      }
+    })
+  const kitchenTeamMembers: TeamMember[] = teamRosterMembers.map(({ name, role, shift, status }) => ({
+    name,
+    role,
+    shift,
+    status: status as TeamStatus,
+  }))
+  const signedInTeamMembers = teamRosterMembers.filter((member) => member.clockedIn)
+
+  const [teamMemberToAddId, setTeamMemberToAddId] = useState('')
   const [prepItems, setPrepItems] = useState<PrepItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
     loadStoredState(storageKeys.inventoryItems, initialInventoryItems, loadStoredInventoryItems),
@@ -701,7 +750,7 @@ function Dashboard({
   const openPrepCount = prepItems.filter((item) => item.status !== 'Ready').length
   const readyPrepCount = prepItems.filter((item) => item.status === 'Ready').length
   const criticalStockCount = inventoryItems.filter(
-    (item) => getInventoryStatus(item.quantity, item.threshold) !== 'OK',
+    (item) => item.quantity > 0 && getInventoryStatus(item.quantity, item.threshold) !== 'OK',
   ).length
 
   const workloadByStation = stationNames.reduce<
@@ -868,12 +917,10 @@ function Dashboard({
     : undefined
 
   const selectedMetrics = businessMetricsByRange[dashboardRange]
-  const positiveAttendanceCount = kitchenTeamMembers.filter(
-    (member) => member.status === 'Clocked In' || member.status === 'On Time',
-  ).length
+  const positiveAttendanceCount = signedInTeamMembers.length
   const lowStockWarnings = inventoryItems.length > 0
     ? inventoryItems
-        .filter((item) => getInventoryStatus(item.quantity, item.threshold) !== 'OK')
+        .filter((item) => item.quantity > 0 && getInventoryStatus(item.quantity, item.threshold) !== 'OK')
         .slice(0, 4)
         .map((item) => ({
           name: item.name,
@@ -881,25 +928,34 @@ function Dashboard({
           detail: `${item.quantity} ${item.unit} left`,
         }))
     : fallbackLowStockWarnings
-  const visibleLowStockCount = inventoryItems.length > 0 ? criticalStockCount : fallbackLowStockWarnings.length
-  const totalTrackedTasks = prepItems.length > 0 ? prepItems.length : 9
-  const completedTrackedTasks = prepItems.length > 0 ? readyPrepCount : 7
+  const visibleLowStockCount = inventoryItems.some((item) => item.quantity > 0)
+    ? criticalStockCount
+    : 0
+  const totalTrackedTasks = visiblePrepItems.length > 0 ? visiblePrepItems.length : prepItems.length > 0 ? prepItems.length : 9
+  const completedTrackedTasks = visiblePrepItems.length > 0 ? visiblePrepItems.filter((item) => item.status === 'Ready').length : prepItems.length > 0 ? readyPrepCount : 7
   const completionRate = Math.round((completedTrackedTasks / totalTrackedTasks) * 100)
-  const taskStatusItems = prepItems.length > 0
-    ? prepItems.slice(0, 4).map((item) => ({
+  const taskStatusItems = visiblePrepItems.length > 0
+    ? visiblePrepItems.slice(0, 4).map((item) => ({
         label: item.name,
         detail: `${item.station} • due ${item.dueTime}`,
         progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
         status: item.status,
       }))
-    : fallbackTaskStatus
-  const staffOnShiftCount = kitchenTeamMembers.filter((member) => member.status !== 'Off Today').length
-  const lateAttendanceCount = kitchenTeamMembers.filter((member) => member.status === 'Late').length
+    : prepItems.length > 0
+      ? prepItems.slice(0, 4).map((item) => ({
+          label: item.name,
+          detail: `${item.station} • due ${item.dueTime}`,
+          progress: item.status === 'Ready' ? 100 : item.status === 'In Progress' ? 64 : 24,
+          status: item.status,
+        }))
+      : fallbackTaskStatus
+  const staffOnShiftCount = signedInTeamMembers.length
+  const lateAttendanceCount = 0
   const urgentPrepCount = visiblePrepItems.filter((item) => item.priority === 'High').length
   const blockedPrepCount = visiblePrepItems.filter((item) => item.status === 'Blocked').length
   const overduePrepCount = visiblePrepItems.filter((item) => getPrepUrgency(item, now) === 'Overdue').length
   const recommendedReorders = inventoryItems
-    .filter((item) => getInventoryStatus(item.quantity, item.threshold) !== 'OK')
+    .filter((item) => item.quantity > 0 && getInventoryStatus(item.quantity, item.threshold) !== 'OK')
     .map((item) => ({
       name: item.name,
       status: getInventoryStatus(item.quantity, item.threshold),
@@ -909,6 +965,58 @@ function Dashboard({
       reorderQty: Math.max(item.threshold * 2, 1),
     }))
     .slice(0, 3)
+
+  const updateTeamShiftEntry = (profileId: string, field: 'inTime' | 'outTime' | 'clockedIn', value: string | boolean) => {
+    setTeamShiftEntries((currentEntries) => {
+      const existing = currentEntries.find((entry) => entry.profileId === profileId)
+      const nextEntry: TeamShiftEntry = existing
+        ? {
+            ...existing,
+            inTime: field === 'inTime' ? String(value) : existing.inTime,
+            outTime: field === 'outTime' ? String(value) : existing.outTime,
+            clockedIn: field === 'clockedIn' ? Boolean(value) : existing.clockedIn,
+          }
+        : {
+            profileId,
+            inTime: field === 'inTime' ? String(value) : '',
+            outTime: field === 'outTime' ? String(value) : '',
+            clockedIn: field === 'clockedIn' ? Boolean(value) : false,
+          }
+
+      if (existing) {
+        return currentEntries.map((entry) => entry.profileId === profileId ? nextEntry : entry)
+      }
+
+      return [...currentEntries, nextEntry]
+    })
+  }
+
+  const toggleShiftSignedIn = (profileId: string) => {
+    const existing = teamShiftEntries.find((entry) => entry.profileId === profileId)
+    const nextClockedIn = !(existing?.clockedIn ?? false)
+    updateTeamShiftEntry(profileId, 'clockedIn', nextClockedIn)
+  }
+
+  const clearAllStaffOffShift = () => {
+    setTeamShiftEntries((currentEntries) =>
+      currentEntries.map((entry) => ({
+        ...entry,
+        clockedIn: false,
+      })),
+    )
+  }
+
+  const addableTeamMembers = profiles.filter((profile) => profile.kitchenId !== kitchenId)
+
+  const handleAddTeamMemberToKitchen = () => {
+    if (!teamMemberToAddId) {
+      return
+    }
+
+    onAddTeamMemberToKitchen(teamMemberToAddId, kitchenId)
+    setTeamMemberToAddId('')
+  }
+
   const dashboardHeroTitle =
     dashboardView === 'Manager'
       ? 'Manager dashboard for sales, labor, staffing, and service control'
@@ -1287,6 +1395,12 @@ function Dashboard({
       window.localStorage.setItem(storageKeys.recipes, JSON.stringify(recipes))
     }
   }, [recipes, storageKeys.recipes])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(storageKeys.teamSchedule, JSON.stringify(teamShiftEntries))
+    }
+  }, [teamShiftEntries, storageKeys.teamSchedule])
 
   useEffect(() => {
     return () => {
@@ -2180,23 +2294,64 @@ function Dashboard({
                     <p className="eyebrow">Shift schedule</p>
                     <h3>Today’s coverage</h3>
                   </div>
-                  <span className="panel-badge">{kitchenTeamMembers.length} team</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="panel-badge">{signedInTeamMembers.length} on shift</span>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={clearAllStaffOffShift}
+                      disabled={signedInTeamMembers.length === 0}
+                    >
+                      All off shift
+                    </button>
+                  </div>
                 </div>
                 <div className="roster-list">
-                  {kitchenTeamMembers.map((member) => (
-                    <div className="schedule-row" key={member.name}>
-                      <div>
-                        <strong>{member.name}</strong>
-                        <p>{member.role}</p>
-                      </div>
-                      <div className="schedule-meta">
-                        <span>{member.shift}</span>
-                        <span className={`status-chip status-${member.status.toLowerCase().replace(/\s+/g, '-')}`}>
-                          {member.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                  {signedInTeamMembers.length === 0 ? (
+                    <p className="empty-state">No one on shift yet.</p>
+                  ) : (
+                    teamRosterMembers
+                      .filter((member) => member.clockedIn)
+                      .map((member) => (
+                        <div className="schedule-row" key={member.profileId}>
+                          <div>
+                            <strong>{member.name}</strong>
+                            <p>{member.role}</p>
+                          </div>
+                          <div className="schedule-meta">
+                            <span>{member.shift}</span>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => toggleShiftSignedIn(member.profileId)}
+                            >
+                              Clock out
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </div>
+                <div className="panel-toolbar" style={{ marginTop: '1rem' }}>
+                  <select
+                    className="toolbar-select"
+                    value={teamMemberToAddId}
+                    onChange={(event) => setTeamMemberToAddId(event.target.value)}
+                    aria-label="Add team member"
+                  >
+                    <option value="">Add a team member</option>
+                    {addableTeamMembers.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.name} ({profile.role})</option>
+                    ))}
+                  </select>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={handleAddTeamMemberToKitchen}
+                    disabled={!teamMemberToAddId}
+                  >
+                    Add to kitchen
+                  </button>
                 </div>
               </article>
 
@@ -2209,14 +2364,18 @@ function Dashboard({
                   <span className="panel-badge">Live board</span>
                 </div>
                 <div className="attendance-list">
-                  {kitchenTeamMembers.map((member) => (
-                    <div className="attendance-row" key={`${member.name}-attendance`}>
-                      <span>{member.name}</span>
-                      <span className={`status-chip status-${member.status.toLowerCase().replace(/\s+/g, '-')}`}>
-                        {member.status}
-                      </span>
-                    </div>
-                  ))}
+                  {teamRosterMembers.length === 0 ? (
+                    <p className="empty-state">No one on shift yet.</p>
+                  ) : (
+                    teamRosterMembers.map((member) => (
+                      <div className="attendance-row" key={`${member.profileId}-attendance`}>
+                        <span>{member.name}</span>
+                        <span className={`status-chip status-${member.clockedIn ? 'clocked-in' : 'off-today'}`}>
+                          {member.clockedIn ? 'Clocked In' : 'Off Today'}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </article>
 
@@ -2307,20 +2466,78 @@ function Dashboard({
                     <p className="eyebrow">Shift schedule</p>
                     <h3>Who’s on the line</h3>
                   </div>
-                  <span className="panel-badge">Crew view</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="panel-badge">Crew view</span>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={clearAllStaffOffShift}
+                      disabled={signedInTeamMembers.length === 0}
+                    >
+                      All off shift
+                    </button>
+                  </div>
                 </div>
                 <div className="roster-list">
-                  {kitchenTeamMembers.map((member) => (
-                    <div className="schedule-row" key={`${member.name}-staff`}>
-                      <div>
-                        <strong>{member.name}</strong>
-                        <p>{member.role}</p>
+                  {teamRosterMembers.length === 0 ? (
+                    <p className="empty-state">No one on shift yet.</p>
+                  ) : (
+                    teamRosterMembers.map((member) => (
+                      <div className="schedule-row" key={`${member.profileId}-staff`}>
+                        <div>
+                          <strong>{member.name}</strong>
+                          <p>{member.role}</p>
+                        </div>
+                        <div className="schedule-meta">
+                          <span>{member.shift}</span>
+                          <div className="panel-toolbar" style={{ gap: '0.4rem', width: '100%' }}>
+                            <input
+                              className="toolbar-input"
+                              type="time"
+                              value={member.inTime}
+                              onChange={(event) => updateTeamShiftEntry(member.profileId, 'inTime', event.target.value)}
+                              aria-label={`${member.name} in time`}
+                            />
+                            <input
+                              className="toolbar-input"
+                              type="time"
+                              value={member.outTime}
+                              onChange={(event) => updateTeamShiftEntry(member.profileId, 'outTime', event.target.value)}
+                              aria-label={`${member.name} out time`}
+                            />
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => toggleShiftSignedIn(member.profileId)}
+                            >
+                              {member.clockedIn ? 'Clock out' : 'Clock in'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="schedule-meta">
-                        <span>{member.shift}</span>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
+                </div>
+                <div className="panel-toolbar" style={{ marginTop: '1rem' }}>
+                  <select
+                    className="toolbar-select"
+                    value={teamMemberToAddId}
+                    onChange={(event) => setTeamMemberToAddId(event.target.value)}
+                    aria-label="Add team member"
+                  >
+                    <option value="">Add a team member</option>
+                    {addableTeamMembers.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.name} ({profile.role})</option>
+                    ))}
+                  </select>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={handleAddTeamMemberToKitchen}
+                    disabled={!teamMemberToAddId}
+                  >
+                    Add to kitchen
+                  </button>
                 </div>
               </article>
 
@@ -3638,6 +3855,19 @@ function App() {
     }
   }
 
+  const handleAddTeamMemberToKitchen = (profileId: string, kitchenId: string) => {
+    const targetProfile = profiles.find((profile) => profile.id === profileId)
+    if (!targetProfile) {
+      return
+    }
+
+    const nextProfiles = profiles.map((profile) =>
+      profile.id === targetProfile.id ? { ...profile, kitchenId } : profile,
+    )
+    setProfiles(nextProfiles)
+    saveProfiles(nextProfiles)
+  }
+
   const handleCreateKitchen = () => {
     const name = newKitchenName.trim()
     if (!name) {
@@ -3893,6 +4123,7 @@ function App() {
       onManageKitchens={() => setShowSelector(true)}
       activeProfileName={activeProfile?.name ?? 'Profile'}
       onSwitchProfile={handleSwitchProfile}
+      onAddTeamMemberToKitchen={handleAddTeamMemberToKitchen}
     />
   )
 }
